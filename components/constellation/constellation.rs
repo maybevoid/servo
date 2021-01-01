@@ -104,9 +104,9 @@ use crate::timer_scheduler::TimerScheduler;
 use background_hang_monitor::HangMonitorRegister;
 use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
-use canvas_traits::canvas::{CanvasId, CanvasMsg};
+use canvas::canvas_protocol::{CanvasProtocol, CreateCanvasProtocol};
+use canvas::runtime::{block_on, RUNTIME};
 use canvas_traits::webgl::WebGLThreads;
-use canvas_traits::ConstellationCanvasMsg;
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;
 use compositing::compositor_thread::WebrenderMsg;
@@ -119,6 +119,7 @@ use devtools_traits::{
 use embedder_traits::{Cursor, EmbedderMsg, EmbedderProxy, EventLoopWaker};
 use embedder_traits::{MediaSessionEvent, MediaSessionPlaybackState};
 use euclid::{default::Size2D as UntypedSize2D, Size2D};
+use ferrite_session::prelude::*;
 use gfx::font_cache_thread::FontCacheThread;
 use gfx_traits::Epoch;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
@@ -478,10 +479,7 @@ pub struct Constellation<Message, LTF, STF, SWF> {
     /// The XR device registry
     webxr_registry: webxr_api::Registry,
 
-    /// A channel through which messages can be sent to the canvas paint thread.
-    canvas_chan: Sender<ConstellationCanvasMsg>,
-
-    ipc_canvas_chan: IpcSender<CanvasMsg>,
+    canvas_session: SharedChannel<CreateCanvasProtocol>,
 
     /// Navigation requests from script awaiting approval from the embedder.
     pending_approval_navigations: PendingApprovalNavigations,
@@ -755,8 +753,7 @@ where
         is_running_problem_test: bool,
         hard_fail: bool,
         enable_canvas_antialiasing: bool,
-        canvas_chan: Sender<ConstellationCanvasMsg>,
-        ipc_canvas_chan: IpcSender<CanvasMsg>,
+        canvas_session: SharedChannel<CreateCanvasProtocol>,
     ) -> Sender<FromCompositorMsg> {
         let (compositor_sender, compositor_receiver) = unbounded();
 
@@ -916,8 +913,7 @@ where
                     }),
                     webgl_threads: state.webgl_threads,
                     webxr_registry: state.webxr_registry,
-                    canvas_chan,
-                    ipc_canvas_chan,
+                    canvas_session,
                     pending_approval_navigations: HashMap::new(),
                     pressed_mouse_buttons: 0,
                     is_running_problem_test,
@@ -929,6 +925,8 @@ where
                     active_media_session: None,
                     user_agent: state.user_agent,
                 };
+
+                let _guard = RUNTIME.enter();
 
                 constellation.run();
             })
@@ -1825,9 +1823,10 @@ where
                     warn!("Error replying to remove iframe ({})", e);
                 }
             },
-            FromScriptMsg::CreateCanvasPaintThread(size, sender) => {
+            FromScriptMsg::CreateCanvasPaintThread(size, sender) => block_on(async move {
                 self.handle_create_canvas_paint_thread_msg(size, sender)
-            },
+                    .await
+            }),
             FromScriptMsg::SetDocumentState(state) => {
                 self.document_states.insert(source_pipeline_id, state);
             },
@@ -2771,11 +2770,6 @@ where
             if let Err(e) = mgr.send(ServiceWorkerMsg::Exit) {
                 warn!("Exit service worker manager failed ({})", e);
             }
-        }
-
-        debug!("Exiting Canvas Paint thread.");
-        if let Err(e) = self.canvas_chan.send(ConstellationCanvasMsg::Exit) {
-            warn!("Exit Canvas Paint thread failed ({})", e);
         }
 
         debug!("Exiting WebGPU threads.");
@@ -4375,27 +4369,27 @@ where
         }
     }
 
-    fn handle_create_canvas_paint_thread_msg(
+    async fn handle_create_canvas_paint_thread_msg(
         &mut self,
         size: UntypedSize2D<u64>,
-        response_sender: IpcSender<(IpcSender<CanvasMsg>, CanvasId)>,
+        response_sender: IpcSender<SharedChannel<CanvasProtocol>>,
     ) {
-        let (canvas_id_sender, canvas_id_receiver) = unbounded();
+        let antialias = self.enable_canvas_antialiasing;
+        let canvas = run_session_with_result(acquire_shared_session(
+            self.canvas_session.clone(),
+            move |chan| {
+                send_value_to(
+                    chan,
+                    (size, antialias),
+                    receive_value_from(chan, move |canvas| {
+                        release_shared_session(chan, send_value(canvas, terminate()))
+                    }),
+                )
+            },
+        ))
+        .await;
 
-        if let Err(e) = self.canvas_chan.send(ConstellationCanvasMsg::Create {
-            id_sender: canvas_id_sender,
-            size,
-            antialias: self.enable_canvas_antialiasing,
-        }) {
-            return warn!("Create canvas paint thread failed ({})", e);
-        }
-        let canvas_id = match canvas_id_receiver.recv() {
-            Ok(canvas_id) => canvas_id,
-            Err(e) => return warn!("Create canvas paint thread id response failed ({})", e),
-        };
-        if let Err(e) = response_sender.send((self.ipc_canvas_chan.clone(), canvas_id)) {
-            warn!("Create canvas paint thread response failed ({})", e);
-        }
+        response_sender.send(canvas).unwrap();
     }
 
     fn handle_webdriver_msg(&mut self, msg: WebDriverCommandMsg) {

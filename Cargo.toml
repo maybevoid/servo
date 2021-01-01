@@ -30,7 +30,7 @@ opt-level = 3
 mio = { git = "https://github.com/servo/mio.git", branch = "servo-mio-0.6.22" }
 
 [patch."https://github.com/jrmuizel/raqote"]
-raqote = { git = "https://github.com/jdm/raqote", branch = "fkup" }
+raqote = { git = "https://github.com/ferrite-rs/raqote", branch = "impl-send" }
 
 # https://github.com/servo/servo/issues/27515#issuecomment-671474054
 [patch."https://github.com/servo/webrender"]

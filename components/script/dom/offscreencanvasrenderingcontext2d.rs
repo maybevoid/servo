@@ -26,10 +26,9 @@ use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::offscreencanvas::OffscreenCanvas;
 use crate::dom::textmetrics::TextMetrics;
-use canvas_traits::canvas::{Canvas2dMsg, CanvasId, CanvasMsg};
+use canvas::canvas_protocol::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
-use ipc_channel::ipc::IpcSender;
 
 #[dom_struct]
 pub struct OffscreenCanvasRenderingContext2D {
@@ -40,16 +39,19 @@ pub struct OffscreenCanvasRenderingContext2D {
 }
 
 impl OffscreenCanvasRenderingContext2D {
+    #[allow(unrooted_must_root)]
     fn new_inherited(
         global: &GlobalScope,
         canvas: &OffscreenCanvas,
         htmlcanvas: Option<&HTMLCanvasElement>,
     ) -> OffscreenCanvasRenderingContext2D {
+        let canvas_state = CanvasState::new(global, canvas.get_size());
+
         OffscreenCanvasRenderingContext2D {
             reflector_: Reflector::new(),
             canvas: Dom::from_ref(canvas),
             htmlcanvas: htmlcanvas.map(Dom::from_ref),
-            canvas_state: CanvasState::new(global, canvas.get_size()),
+            canvas_state,
         }
     }
 
@@ -64,24 +66,16 @@ impl OffscreenCanvasRenderingContext2D {
         reflect_dom_object(boxed, global)
     }
 
+    pub fn get_canvas_session(&self) -> CanvasSession {
+        self.canvas_state.get_canvas_session()
+    }
+
     pub fn set_canvas_bitmap_dimensions(&self, size: Size2D<u64>) {
         self.canvas_state.set_bitmap_dimensions(size);
     }
 
-    pub fn send_canvas_2d_msg(&self, msg: Canvas2dMsg) {
-        self.canvas_state.send_canvas_2d_msg(msg)
-    }
-
     pub fn origin_is_clean(&self) -> bool {
         self.canvas_state.origin_is_clean()
-    }
-
-    pub fn get_canvas_id(&self) -> CanvasId {
-        self.canvas_state.get_canvas_id()
-    }
-
-    pub fn get_ipc_renderer(&self) -> IpcSender<CanvasMsg> {
-        self.canvas_state.get_ipc_renderer().clone()
     }
 }
 

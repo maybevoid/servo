@@ -495,7 +495,8 @@ impl GenericDrawTarget for raqote::DrawTarget {
             raqote::BlendMode::Xor |
             raqote::BlendMode::DstOver |
             raqote::BlendMode::SrcOver => {
-                self.fill(
+                raqote::DrawTarget::fill(
+                    self,
                     path.as_raqote(),
                     &pattern.source(),
                     draw_options.as_raqote(),

@@ -528,7 +528,7 @@ impl WindowMethods for Window {
         let LogicalSize { width, height } = self
             .winit_window
             .get_outer_size()
-            .expect("Failed to get window outer size.");
+            .unwrap_or(LogicalSize::new(1920.0, 1080.0));
         let LogicalPosition { x, y } = self
             .winit_window
             .get_position()

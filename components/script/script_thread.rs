@@ -162,6 +162,7 @@ use std::time::{Duration, SystemTime};
 use style::dom::OpaqueNode;
 use style::thread_state::{self, ThreadState};
 use time::{at_utc, get_time, precise_time_ns, Timespec};
+use tokio::runtime;
 use url::Position;
 use webgpu::identity::WebGPUMsg;
 use webrender_api::units::LayoutPixel;
@@ -1444,6 +1445,14 @@ impl ScriptThread {
     /// messages on its port.
     pub fn start(&self) {
         debug!("Starting script thread.");
+
+        let runtime = runtime::Builder::new_multi_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        let _guard = runtime.enter();
+
         while self.handle_msgs() {
             // Go on...
             debug!("Running script thread.");

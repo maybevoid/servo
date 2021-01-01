@@ -32,17 +32,18 @@ use crate::inline::InlineFragmentNodeFlags;
 use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
 use app_units::{Au, AU_PER_PX};
-use canvas_traits::canvas::{CanvasMsg, FromLayoutMsg};
+use canvas::canvas_protocol::*;
+use canvas::runtime::block_on;
 use embedder_traits::Cursor;
 use euclid::{
     default::{Point2D, Rect, SideOffsets2D as UntypedSideOffsets2D, Size2D},
     rect, SideOffsets2D,
 };
+use ferrite_session::prelude::*;
 use fnv::FnvHashMap;
 use gfx::text::glyph::ByteIndex;
 use gfx::text::TextRun;
 use gfx_traits::{combine_id_with_fragment_type, FragmentType, StackingContextId};
-use ipc_channel::ipc;
 use msg::constellation_msg::PipelineId;
 use net_traits::image_cache::UsePlaceholder;
 use range::Range;
@@ -1906,17 +1907,29 @@ impl Fragment {
                 let image_key = match canvas_fragment_info.source {
                     CanvasFragmentSource::WebGL(image_key) => image_key,
                     CanvasFragmentSource::WebGPU(image_key) => image_key,
-                    CanvasFragmentSource::Image(ref ipc_renderer) => match *ipc_renderer {
-                        Some(ref ipc_renderer) => {
-                            let ipc_renderer = ipc_renderer.lock().unwrap();
-                            let (sender, receiver) = ipc::channel().unwrap();
-                            ipc_renderer
-                                .send(CanvasMsg::FromLayout(
-                                    FromLayoutMsg::SendData(sender),
-                                    canvas_fragment_info.canvas_id.clone(),
-                                ))
-                                .unwrap();
-                            receiver.recv().unwrap().image_key
+                    CanvasFragmentSource::Image(ref ctx) => match *ctx {
+                        Some(ref session) => {
+                            let shared = session.get_shared_channel();
+                            let res = block_on(async_acquire_shared_session_with_result(
+                                shared,
+                                move |chan| {
+                                    choose!(
+                                        chan,
+                                        FromLayout,
+                                        receive_value_from(chan, move |data| {
+                                            release_shared_session(
+                                                chan,
+                                                send_value(data, terminate()),
+                                            )
+                                        })
+                                    )
+                                },
+                            ))
+                            .unwrap();
+                            match res {
+                                Some(data) => data.image_key,
+                                None => return,
+                            }
                         },
                         None => return,
                     },

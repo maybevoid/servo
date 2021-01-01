@@ -21,12 +21,12 @@ use crate::dom::canvaspattern::CanvasPattern;
 use crate::dom::canvasrenderingcontext2d::CanvasRenderingContext2D;
 use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
+use canvas::canvas_protocol::*;
+use canvas::runtime::block_on;
 use canvas_traits::canvas::CanvasImageData;
-use canvas_traits::canvas::CanvasMsg;
-use canvas_traits::canvas::FromLayoutMsg;
 use dom_struct::dom_struct;
 use euclid::{Scale, Size2D};
-use ipc_channel::ipc::IpcSender;
+use ferrite_session::prelude::*;
 use servo_url::ServoUrl;
 use std::cell::Cell;
 use style_traits::CSSPixel;
@@ -54,12 +54,23 @@ impl PaintRenderingContext2D {
         )
     }
 
-    pub fn send_data(&self, sender: IpcSender<CanvasImageData>) {
-        let msg = CanvasMsg::FromLayout(
-            FromLayoutMsg::SendData(sender),
-            self.context.get_canvas_id(),
-        );
-        let _ = self.context.get_ipc_renderer().send(msg);
+    pub fn get_data(&self) -> Option<CanvasImageData> {
+        let session = self.context.get_canvas_session();
+        let shared = session.get_shared_channel();
+        block_on(async_acquire_shared_session_with_result(
+            shared,
+            move |chan| {
+                choose!(
+                    chan,
+                    FromLayout,
+                    receive_value_from(chan, move |res| release_shared_session(
+                        chan,
+                        send_value(res, terminate())
+                    ))
+                )
+            },
+        ))
+        .unwrap()
     }
 
     pub fn take_missing_image_urls(&self) -> Vec<ServoUrl> {

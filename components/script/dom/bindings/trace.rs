@@ -46,9 +46,8 @@ use crate::script_runtime::{ContextForRequestInterrupt, StreamConsumer};
 use crate::script_thread::IncompleteParserContexts;
 use crate::task::TaskBox;
 use app_units::Au;
-use canvas_traits::canvas::{
-    CanvasGradientStop, CanvasId, LinearGradientStyle, RadialGradientStyle,
-};
+use canvas::canvas_protocol::CanvasSession;
+use canvas_traits::canvas::{CanvasGradientStop, LinearGradientStyle, RadialGradientStyle};
 use canvas_traits::canvas::{
     CompositionOrBlending, Direction, LineCapStyle, LineJoinStyle, RepetitionStyle, TextAlign,
     TextBaseline,
@@ -70,6 +69,7 @@ use embedder_traits::{EventLoopWaker, MediaMetadata};
 use encoding_rs::{Decoder, Encoding};
 use euclid::default::{Point2D, Rect, Rotation3D, Transform2D};
 use euclid::Length as EuclidLength;
+use ferrite_session::prelude::{SharedChannel, SharedProtocol};
 use html5ever::buffer_queue::BufferQueue;
 use html5ever::{LocalName, Namespace, Prefix, QualName};
 use http::header::HeaderMap;
@@ -651,7 +651,6 @@ unsafe_no_jsmanaged_fields!(
 unsafe_no_jsmanaged_fields!(ScriptToConstellationChan);
 unsafe_no_jsmanaged_fields!(InteractiveMetrics);
 unsafe_no_jsmanaged_fields!(InteractiveWindow);
-unsafe_no_jsmanaged_fields!(CanvasId);
 unsafe_no_jsmanaged_fields!(SourceSet);
 unsafe_no_jsmanaged_fields!(AudioBuffer);
 unsafe_no_jsmanaged_fields!(Arc<Mutex<AudioContext>>);
@@ -926,6 +925,21 @@ unsafe impl JSTraceable for StyleLocked<PropertyDeclarationBlock> {
 }
 
 unsafe impl JSTraceable for StyleLocked<MediaList> {
+    unsafe fn trace(&self, _trc: *mut JSTracer) {
+        // Do nothing.
+    }
+}
+
+unsafe impl JSTraceable for CanvasSession {
+    unsafe fn trace(&self, _trc: *mut JSTracer) {
+        // Do nothing.
+    }
+}
+
+unsafe impl<S> JSTraceable for SharedChannel<S>
+where
+    S: SharedProtocol,
+{
     unsafe fn trace(&self, _trc: *mut JSTracer) {
         // Do nothing.
     }

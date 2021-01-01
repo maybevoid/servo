@@ -24,10 +24,9 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::textmetrics::TextMetrics;
-use canvas_traits::canvas::{Canvas2dMsg, CanvasId, CanvasMsg};
+use canvas::canvas_protocol::*;
 use dom_struct::dom_struct;
 use euclid::default::{Point2D, Rect, Size2D};
-use ipc_channel::ipc::IpcSender;
 use servo_url::ServoUrl;
 use std::mem;
 
@@ -70,16 +69,14 @@ impl CanvasRenderingContext2D {
         reflect_dom_object(boxed, global)
     }
 
+    pub fn get_canvas_session(&self) -> CanvasSession {
+        self.canvas_state.get_canvas_session()
+    }
+
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
     pub fn set_bitmap_dimensions(&self, size: Size2D<u32>) {
         self.reset_to_initial_state();
-        self.canvas_state
-            .get_ipc_renderer()
-            .send(CanvasMsg::Recreate(
-                size.to_u64(),
-                self.canvas_state.get_canvas_id(),
-            ))
-            .unwrap();
+        self.canvas_state.set_bitmap_dimensions(size.to_u64());
     }
 
     // https://html.spec.whatwg.org/multipage/#reset-the-rendering-context-to-its-default-state
@@ -103,19 +100,6 @@ impl CanvasRenderingContext2D {
         )
     }
 
-    pub fn get_canvas_id(&self) -> CanvasId {
-        self.canvas_state.get_canvas_id()
-    }
-
-    pub fn send_canvas_2d_msg(&self, msg: Canvas2dMsg) {
-        self.canvas_state.send_canvas_2d_msg(msg)
-    }
-
-    // TODO: Remove this
-    pub fn get_ipc_renderer(&self) -> IpcSender<CanvasMsg> {
-        self.canvas_state.get_ipc_renderer().clone()
-    }
-
     pub fn origin_is_clean(&self) -> bool {
         self.canvas_state.origin_is_clean()
     }
@@ -125,6 +109,7 @@ impl CanvasRenderingContext2D {
             Point2D::new(rect.origin.x as u64, rect.origin.y as u64),
             Size2D::new(rect.size.width as u64, rect.size.height as u64),
         );
+
         self.canvas_state.get_rect(
             self.canvas
                 .as_ref()
@@ -134,24 +119,10 @@ impl CanvasRenderingContext2D {
     }
 }
 
-pub trait LayoutCanvasRenderingContext2DHelpers {
+impl LayoutDom<'_, CanvasRenderingContext2D> {
     #[allow(unsafe_code)]
-    unsafe fn get_ipc_renderer(self) -> IpcSender<CanvasMsg>;
-    fn get_canvas_id(self) -> CanvasId;
-}
-
-impl LayoutCanvasRenderingContext2DHelpers for LayoutDom<'_, CanvasRenderingContext2D> {
-    #[allow(unsafe_code)]
-    unsafe fn get_ipc_renderer(self) -> IpcSender<CanvasMsg> {
-        (*self.unsafe_get()).canvas_state.get_ipc_renderer().clone()
-    }
-
-    #[allow(unsafe_code)]
-    fn get_canvas_id(self) -> CanvasId {
-        // FIXME(nox): This relies on the fact that CanvasState::get_canvas_id
-        // does nothing fancy but it would be easier to trust a
-        // LayoutDom<_>-like type that would wrap the &CanvasState.
-        unsafe { self.unsafe_get().canvas_state.get_canvas_id() }
+    pub unsafe fn get_canvas_session(&self) -> CanvasSession {
+        self.unsafe_get().get_canvas_session()
     }
 }
 
@@ -650,17 +621,5 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowcolor
     fn SetShadowColor(&self, value: DOMString) {
         self.canvas_state.set_shadow_color(value)
-    }
-}
-
-impl Drop for CanvasRenderingContext2D {
-    fn drop(&mut self) {
-        if let Err(err) = self
-            .canvas_state
-            .get_ipc_renderer()
-            .send(CanvasMsg::Close(self.canvas_state.get_canvas_id()))
-        {
-            warn!("Could not close canvas: {}", err)
-        }
     }
 }

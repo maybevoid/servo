@@ -16,9 +16,11 @@ doctest = false
 app_units = "0.7"
 atomic_refcell = "0.1"
 bitflags = "1.0"
+canvas= { path = "../canvas" }
 canvas_traits = { path = "../canvas_traits" }
 embedder_traits = { path = "../embedder_traits" }
 euclid = "0.20"
+ferrite-session = { git = "https://github.com/ferrite-rs/ferrite" }
 fnv = "1.0"
 gfx = { path = "../gfx" }
 gfx_traits = { path = "../gfx_traits" }
@@ -54,4 +56,3 @@ xi-unicode = "0.1.0"
 
 [dev-dependencies]
 size_of_test = { path = "../size_of_test" }
-

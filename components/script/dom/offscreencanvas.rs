@@ -16,12 +16,13 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::offscreencanvasrenderingcontext2d::OffscreenCanvasRenderingContext2D;
 use crate::script_runtime::JSContext;
-use canvas_traits::canvas::{CanvasMsg, FromScriptMsg};
+use canvas::canvas_protocol::*;
+use canvas::runtime::block_on;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
+use ferrite_session::prelude::*;
 use ipc_channel::ipc::IpcSharedMemory;
 use js::rust::HandleValue;
-use profile_traits::ipc;
 use std::cell::Cell;
 
 #[unrooted_must_root_lint::must_root]
@@ -104,15 +105,25 @@ impl OffscreenCanvas {
 
         let data = match self.context.borrow().as_ref() {
             Some(&OffscreenCanvasContext::OffscreenContext2d(ref context)) => {
-                let (sender, receiver) =
-                    ipc::channel(self.global().time_profiler_chan().clone()).unwrap();
-                let msg = CanvasMsg::FromScript(
-                    FromScriptMsg::SendPixels(sender),
-                    context.get_canvas_id(),
-                );
-                context.get_ipc_renderer().send(msg).unwrap();
+                let session = context.get_canvas_session();
+                let shared = session.get_shared_channel();
 
-                Some(receiver.recv().unwrap())
+                let res = block_on(async_acquire_shared_session_with_result(
+                    shared,
+                    move |chan| {
+                        choose!(
+                            chan,
+                            FromScript,
+                            receive_value_from(chan, move |data| release_shared_session(
+                                chan,
+                                send_value(data, terminate())
+                            ))
+                        )
+                    },
+                ))
+                .unwrap();
+
+                Some(res)
             },
             None => None,
         };

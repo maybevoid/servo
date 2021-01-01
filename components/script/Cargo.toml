@@ -33,10 +33,12 @@ serde_json = "1.0"
 accountable-refcell = { version = "0.2.0", optional = true }
 app_units = "0.7"
 arrayvec = "0.5.1"
+tokio = { version = "1.1.1", features = [ "full" ] }
 backtrace = "0.3"
 base64 = "0.10.1"
 bitflags = "1.0"
 bluetooth_traits = { path = "../bluetooth_traits" }
+canvas = { path = "../canvas" }
 canvas_traits = { path = "../canvas_traits" }
 chrono = "0.4"
 content-security-policy = { version = "0.4.0", features = ["serde"] }
@@ -52,6 +54,7 @@ embedder_traits = { path = "../embedder_traits" }
 encoding_rs = "0.8"
 enum-iterator = "0.3"
 euclid = "0.20"
+ferrite-session = { git = "https://github.com/ferrite-rs/ferrite" }
 fnv = "1.0"
 fxhash = "0.2"
 headers = "0.2"

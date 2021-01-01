@@ -69,7 +69,7 @@ impl PathState {
     }
 }
 
-pub trait Backend {
+pub trait Backend: Send {
     fn get_composition_op(&self, opts: &DrawOptions) -> CompositionOp;
     fn need_to_draw_shadow(&self, color: &Color) -> bool;
     fn set_shadow_color<'a>(&mut self, color: RGBA, state: &mut CanvasPaintState<'a>);
@@ -96,7 +96,7 @@ pub trait Backend {
 
 /// A generic PathBuilder that abstracts the interface for azure's and raqote's PathBuilder.
 /// TODO: De-abstract now that Azure is removed?
-pub trait GenericPathBuilder {
+pub trait GenericPathBuilder: Send {
     fn arc(
         &mut self,
         origin: Point2D<f32>,
@@ -235,7 +235,7 @@ impl<'a> PathBuilderRef<'a> {
 // This defines required methods for DrawTarget of azure and raqote
 // The prototypes are derived from azure's methods.
 // TODO: De-abstract now that Azure is removed?
-pub trait GenericDrawTarget {
+pub trait GenericDrawTarget: Send {
     fn clear_rect(&mut self, rect: &Rect<f32>);
     fn copy_surface(
         &mut self,
@@ -816,16 +816,20 @@ impl<'a> CanvasData<'a> {
         _fill_rule: FillRule,
         chan: IpcSender<bool>,
     ) {
+        let result = self.is_point_in_path_bool(x, y, _fill_rule);
+        chan.send(result).unwrap();
+    }
+
+    pub fn is_point_in_path_bool(&mut self, x: f64, y: f64, _fill_rule: FillRule) -> bool {
         self.ensure_path();
-        let result = match self.path_state.as_ref() {
+        match self.path_state.as_ref() {
             Some(PathState::UserSpacePath(ref path, ref transform)) => {
                 let target_transform = self.drawtarget.get_transform();
                 let path_transform = transform.as_ref().unwrap_or(&target_transform);
                 path.contains_point(x, y, path_transform)
             },
             Some(_) | None => false,
-        };
-        chan.send(result).unwrap();
+        }
     }
 
     pub fn move_to(&mut self, point: &Point2D<f32>) {
@@ -1104,7 +1108,20 @@ impl<'a> CanvasData<'a> {
         });
     }
 
+    pub fn get_pixels(&mut self) -> Vec<u8> {
+        self.drawtarget.snapshot_data_owned()
+    }
+
     pub fn send_data(&mut self, chan: IpcSender<CanvasImageData>) {
+        match self.get_data() {
+            Some(data) => {
+                chan.send(data).unwrap();
+            },
+            None => {},
+        }
+    }
+
+    pub fn get_data(&mut self) -> Option<CanvasImageData> {
         let size = self.drawtarget.get_size();
 
         let descriptor = webrender_api::ImageDescriptor {
@@ -1127,7 +1144,7 @@ impl<'a> CanvasData<'a> {
             None => {
                 let key = match self.webrender_api.generate_key() {
                     Ok(key) => key,
-                    Err(()) => return,
+                    Err(()) => return None,
                 };
                 updates.push(ImageUpdate::Add(key, descriptor, data));
                 self.image_key = Some(key);
@@ -1146,7 +1163,8 @@ impl<'a> CanvasData<'a> {
         let data = CanvasImageData {
             image_key: self.image_key.unwrap(),
         };
-        chan.send(data).unwrap();
+
+        Some(data)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata

@@ -15,11 +15,12 @@ use crate::StructuredSerializedData;
 use crate::WindowSizeType;
 use crate::WorkerGlobalScopeInit;
 use crate::WorkerScriptLoadOrigin;
-use canvas_traits::canvas::{CanvasId, CanvasMsg};
+use canvas::canvas_protocol::CanvasProtocol;
 use devtools_traits::{ScriptToDevtoolsControlMsg, WorkerId};
 use embedder_traits::{EmbedderMsg, MediaSessionEvent};
 use euclid::default::Size2D as UntypedSize2D;
 use euclid::Size2D;
+use ferrite_session::prelude::*;
 use gfx_traits::Epoch;
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use msg::constellation_msg::{
@@ -175,10 +176,7 @@ pub enum ScriptMsg {
     ChangeRunningAnimationsState(AnimationState),
     /// Requests that a new 2D canvas thread be created. (This is done in the constellation because
     /// 2D canvases may use the GPU and we don't want to give untrusted content access to the GPU.)
-    CreateCanvasPaintThread(
-        UntypedSize2D<u64>,
-        IpcSender<(IpcSender<CanvasMsg>, CanvasId)>,
-    ),
+    CreateCanvasPaintThread(UntypedSize2D<u64>, IpcSender<SharedChannel<CanvasProtocol>>),
     /// Notifies the constellation that this frame has received focus.
     Focus,
     /// Get the top-level browsing context info for a given browsing context.
