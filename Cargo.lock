@@ -5271,6 +5271,7 @@ dependencies = [
  "encoding_rs",
  "enum-iterator",
  "euclid",
+ "ferrite-session",
  "fnv",
  "fxhash",
  "headers",
