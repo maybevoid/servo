@@ -64,10 +64,12 @@ impl Backend for RaqoteBackend {
     }
 
     fn create_drawtarget(&self, size: Size2D<u64>) -> Box<dyn GenericDrawTarget> {
-        Box::new(raqote::DrawTarget::new(
-            size.width as i32,
-            size.height as i32,
-        ))
+        Box::new(DrawTarget {
+            target: raqote::DrawTarget::new(
+                size.width as i32,
+                size.height as i32,
+            )
+        })
     }
 
     fn recreate_paint_state<'a>(&self, _state: &CanvasPaintState<'a>) -> CanvasPaintState<'a> {
@@ -350,7 +352,15 @@ fn create_gradient_stops(gradient_stops: Vec<CanvasGradientStop>) -> Vec<raqote:
     stops
 }
 
-impl GenericDrawTarget for raqote::DrawTarget {
+struct DrawTarget {
+    target: raqote::DrawTarget
+}
+
+#[allow(unsafe_code)]
+unsafe impl Send for DrawTarget {}
+
+impl GenericDrawTarget for DrawTarget
+{
     fn clear_rect(&mut self, rect: &Rect<f32>) {
         let mut pb = raqote::PathBuilder::new();
         pb.rect(
@@ -380,7 +390,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
         let data = surface.as_raqote();
         let s = unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u32, data.len() / 4) };
         dt.get_data_mut().copy_from_slice(s);
-        raqote::DrawTarget::copy_surface(self, &dt, source.to_box2d(), destination);
+        raqote::DrawTarget::copy_surface(&mut self.target, &dt, source.to_box2d(), destination);
     }
     // TODO(pylbrecht)
     // Somehow a duplicate of `create_gradient_stops()` with different types.
@@ -408,7 +418,9 @@ impl GenericDrawTarget for raqote::DrawTarget {
         size: &Size2D<i32>,
         _format: SurfaceFormat,
     ) -> Box<dyn GenericDrawTarget> {
-        Box::new(raqote::DrawTarget::new(size.width, size.height))
+        Box::new(DrawTarget {
+            target: raqote::DrawTarget::new(size.width, size.height)
+        })
     }
     fn create_source_surface_from_data(
         &self,
@@ -481,8 +493,8 @@ impl GenericDrawTarget for raqote::DrawTarget {
     fn fill(&mut self, path: &Path, pattern: canvas_data::Pattern, draw_options: &DrawOptions) {
         match draw_options.as_raqote().blend_mode {
             raqote::BlendMode::Src => {
-                self.clear(raqote::SolidSource::from_unpremultiplied_argb(0, 0, 0, 0));
-                self.fill(
+                self.target.clear(raqote::SolidSource::from_unpremultiplied_argb(0, 0, 0, 0));
+                self.target.fill(
                     path.as_raqote(),
                     &pattern.source(),
                     draw_options.as_raqote(),
@@ -495,7 +507,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
             raqote::BlendMode::Xor |
             raqote::BlendMode::DstOver |
             raqote::BlendMode::SrcOver => {
-                self.fill(
+                self.target.fill(
                     path.as_raqote(),
                     &pattern.source(),
                     draw_options.as_raqote(),
@@ -506,10 +518,10 @@ impl GenericDrawTarget for raqote::DrawTarget {
             raqote::BlendMode::DstIn |
             raqote::BlendMode::DstAtop => {
                 let mut options = draw_options.as_raqote().clone();
-                self.push_layer_with_blend(1., options.blend_mode);
+                self.target.push_layer_with_blend(1., options.blend_mode);
                 options.blend_mode = raqote::BlendMode::SrcOver;
-                self.fill(path.as_raqote(), &pattern.source(), &options);
-                self.pop_layer();
+                self.target.fill(path.as_raqote(), &pattern.source(), &options);
+                self.target.pop_layer();
             },
             _ => warn!(
                 "unrecognized blend mode: {:?}",
@@ -549,7 +561,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
             };
             start += advance * point_size / 24. / 96.;
         }
-        self.draw_glyphs(
+        self.target.draw_glyphs(
             font,
             point_size,
             &ids,
@@ -589,19 +601,19 @@ impl GenericDrawTarget for raqote::DrawTarget {
         SurfaceFormat::Raqote(())
     }
     fn get_size(&self) -> Size2D<i32> {
-        Size2D::new(self.width(), self.height())
+        Size2D::new(self.target.width(), self.target.height())
     }
     fn get_transform(&self) -> Transform2D<f32> {
-        *self.get_transform()
+        *self.target.get_transform()
     }
     fn pop_clip(&mut self) {
-        self.pop_clip();
+        self.target.pop_clip();
     }
     fn push_clip(&mut self, path: &Path) {
-        self.push_clip(path.as_raqote());
+        self.target.push_clip(path.as_raqote());
     }
     fn set_transform(&mut self, matrix: &Transform2D<f32>) {
-        self.set_transform(matrix);
+        self.target.set_transform(matrix);
     }
     fn snapshot(&self) -> SourceSurface {
         SourceSurface::Raqote(self.snapshot_data_owned())
@@ -613,7 +625,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
         stroke_options: &StrokeOptions,
         draw_options: &DrawOptions,
     ) {
-        self.stroke(
+        self.target.stroke(
             path.as_raqote(),
             &pattern.source(),
             stroke_options.as_raqote(),
@@ -638,7 +650,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
         };
         stroke_options.cap = cap;
 
-        self.stroke(
+        self.target.stroke(
             &pb.finish(),
             &pattern.source(),
             &stroke_options,
@@ -660,7 +672,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
             rect.size.height,
         );
 
-        self.stroke(
+        self.target.stroke(
             &pb.finish(),
             &pattern.source(),
             stroke_options.as_raqote(),
@@ -669,7 +681,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
     }
     #[allow(unsafe_code)]
     fn snapshot_data(&self, f: &dyn Fn(&[u8]) -> Vec<u8>) -> Vec<u8> {
-        let v = self.get_data();
+        let v = self.target.get_data();
         f(unsafe {
             std::slice::from_raw_parts(
                 v.as_ptr() as *const u8,
@@ -679,7 +691,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
     }
     #[allow(unsafe_code)]
     fn snapshot_data_owned(&self) -> Vec<u8> {
-        let v = self.get_data();
+        let v = self.target.get_data();
         unsafe {
             std::slice::from_raw_parts(
                 v.as_ptr() as *const u8,
