@@ -207,13 +207,8 @@ impl CanvasState {
     pub async fn set_bitmap_dimensions(&self, size: Size2D<u64>) {
         self.reset_to_initial_state();
 
-        run_session(acquire_shared_session! ( self.session, chan => {
-            choose! ( chan, Recreate,
-                send_value_to! ( chan, size,
-                    release_shared_session (chan,
-                        terminate! () ) ) )
-        }))
-        .await;
+        self.send_canvas_message(CanvasMessage::Recreate(size))
+            .await
     }
 
     pub fn reset_to_initial_state(&self) {
@@ -1390,14 +1385,8 @@ impl CanvasState {
         let pixels: Vec<u8> =
             Vec::from(unsafe { imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size)) });
 
-        run_session(acquire_shared_session! ( self.session, chan => {
-            choose! ( chan, PutImageData,
-                send_value_to! ( chan, dst_rect,
-                    send_value_to! ( chan, pixels,
-                        release_shared_session ( chan,
-                            terminate () ) ) ) )
-        }))
-        .await;
+        self.send_canvas_message(CanvasMessage::PutImageData(dst_rect, pixels))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage

@@ -45,6 +45,8 @@ pub enum CanvasMessage {
     SetFont(FontStyleStruct),
     SetTextAlign(TextAlign),
     SetTextBaseline(TextBaseline),
+    PutImageData(Rect<u64>, Vec<u8>),
+    Recreate(Size2D<u64>),
 }
 
 define_choice! { CanvasOps;
@@ -70,13 +72,6 @@ define_choice! { CanvasOps;
       Z
     >
   >,
-  PutImageData: ReceiveValue <
-    Rect<u64>,
-    ReceiveValue <
-      Vec < u8 >,
-      Z
-    >
-  >,
   FromLayout: SendValue <
     Option<CanvasImageData>,
     Z
@@ -85,10 +80,6 @@ define_choice! { CanvasOps;
     Vec<u8>,
     Z
   >,
-  Recreate: ReceiveValue <
-    Size2D<u64>,
-    Z
-  >
 }
 
 pub type CanvasSession = LinearToShared<ExternalChoice<CanvasOps>>;
@@ -188,6 +179,12 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
             CanvasMessage::SetTextBaseline(text_baseline) => {
                 canvas.set_text_baseline(text_baseline)
             },
+            CanvasMessage::PutImageData(rect, img) => {
+                canvas.put_image_data(img, rect);
+            },
+            CanvasMessage::Recreate(size) => {
+                canvas.recreate(size);
+            },
           }
 
           detach_shared_session (
@@ -226,17 +223,6 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
             ))
         })
       },
-      PutImageData => {
-        receive_value! ( rect => {
-          receive_value! ( img => {
-            canvas.put_image_data(img, rect);
-
-            detach_shared_session (
-              canvas_session ( canvas )
-            )
-          })
-        })
-      },
       FromLayout => {
         let data = canvas.get_data();
         send_value! ( data,
@@ -252,15 +238,6 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
             canvas_session ( canvas )
           )
         )
-      },
-      Recreate => {
-        receive_value! ( size => {
-          canvas.recreate(size);
-
-          detach_shared_session (
-            canvas_session ( canvas )
-          )
-        })
       },
     })
 }
