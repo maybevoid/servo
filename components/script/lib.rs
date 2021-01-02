@@ -66,6 +66,7 @@ pub mod document_loader;
 mod dom;
 #[warn(deprecated)]
 mod canvas_state;
+#[allow(dead_code)]
 pub mod canvas_state_new;
 mod euclidext;
 #[warn(deprecated)]

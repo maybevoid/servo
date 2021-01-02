@@ -177,6 +177,7 @@ use webgpu::{
 };
 use webrender_api::{DocumentId, ExternalImageId, ImageKey};
 use webxr_api::{Finger, Hand, Ray, View};
+use ferrite_session::{SharedChannel, SharedProtocol};
 
 unsafe_no_jsmanaged_fields!(Tm);
 unsafe_no_jsmanaged_fields!(JoinHandle<()>);
@@ -926,6 +927,15 @@ unsafe impl JSTraceable for StyleLocked<PropertyDeclarationBlock> {
 }
 
 unsafe impl JSTraceable for StyleLocked<MediaList> {
+    unsafe fn trace(&self, _trc: *mut JSTracer) {
+        // Do nothing.
+    }
+}
+
+unsafe impl <S> JSTraceable for SharedChannel<S>
+where
+  S : SharedProtocol
+{
     unsafe fn trace(&self, _trc: *mut JSTracer) {
         // Do nothing.
     }

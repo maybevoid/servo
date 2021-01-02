@@ -2,8 +2,6 @@ use ferrite_session::*;
 
 use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
-use ipc_channel::ipc::{IpcSender};
-use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
 
 use crate::canvas_data::*;
@@ -15,7 +13,7 @@ use gfx::font_cache_thread::FontCacheThread;
 pub enum CanvasMessage {
     Arc(Point2D<f32>, f32, f32, f32, bool),
     ArcTo(Point2D<f32>, Point2D<f32>, f32),
-    DrawImage(Option<ByteBuf>, Size2D<f64>, Rect<f64>, Rect<f64>, bool),
+    DrawImage(Option<Vec<u8>>, Size2D<f64>, Rect<f64>, Rect<f64>, bool),
     BeginPath,
     BezierCurveTo(Point2D<f32>, Point2D<f32>, Point2D<f32>),
     ClearRect(Rect<f32>),
@@ -25,7 +23,6 @@ pub enum CanvasMessage {
     Fill(FillOrStrokeStyle),
     FillText(String, f64, f64, Option<f64>, FillOrStrokeStyle, bool),
     FillRect(Rect<f32>, FillOrStrokeStyle),
-    GetTransform(IpcSender<Transform2D<f32>>),
     LineTo(Point2D<f32>),
     MoveTo(Point2D<f32>),
     QuadraticCurveTo(Point2D<f32>, Point2D<f32>),
@@ -53,6 +50,10 @@ pub enum CanvasMessage {
 define_choice! { CanvasOps;
   Message: ReceiveValue <
     CanvasMessage,
+    Z
+  >,
+  GetTransform: SendValue<
+    Transform2D<f32>,
     Z
   >,
   GetImageData: ReceiveValue <
@@ -152,7 +153,7 @@ pub fn canvas_session
             ) => {
                 let data = imagedata.map_or_else(
                     || vec![0; image_size.width as usize * image_size.height as usize * 4],
-                    |bytes| bytes.into_vec(),
+                    |bytes| bytes,
                 );
                 canvas.draw_image(
                     data,
@@ -186,10 +187,6 @@ pub fn canvas_session
             CanvasMessage::SetLineCap(cap) => canvas.set_line_cap(cap),
             CanvasMessage::SetLineJoin(join) => canvas.set_line_join(join),
             CanvasMessage::SetMiterLimit(limit) => canvas.set_miter_limit(limit),
-            CanvasMessage::GetTransform(sender) => {
-                let transform = canvas.get_transform();
-                sender.send(transform).unwrap();
-            },
             CanvasMessage::SetTransform(ref matrix) => canvas.set_transform(matrix),
             CanvasMessage::SetGlobalAlpha(alpha) => canvas.set_global_alpha(alpha),
             CanvasMessage::SetGlobalComposition(op) => {
@@ -216,6 +213,13 @@ pub fn canvas_session
             canvas_session ( canvas )
           )
         })
+      },
+      GetTransform => {
+        let transform = canvas.get_transform();
+        send_value! ( transform,
+          detach_shared_session (
+            canvas_session ( canvas )
+          ))
       },
       GetImageData => {
         receive_value!( msg => {
@@ -319,4 +323,39 @@ pub fn create_canvas_session
         ) )
     } )
   )
+}
+
+pub async fn draw_image_in_other
+  ( source: SharedChannel< CanvasSession >,
+    target: SharedChannel< CanvasSession >,
+    image_size: Size2D<f64>,
+    dest_rect: Rect<f64>,
+    source_rect: Rect<f64>,
+    smoothing: bool
+  )
+{
+  let prog: Session<End> =
+    acquire_shared_session ( source, move | source_chan | async move {
+      acquire_shared_session ( target, move | target_chan | async move {
+        choose! ( source_chan, GetImageData,
+          send_value_to! ( source_chan, (source_rect.to_u64(), image_size.to_u64()),
+            receive_value_from ( source_chan, move | image: Vec<u8> | async move {
+              choose! ( target_chan, Message,
+                send_value_to! ( target_chan,
+                  CanvasMessage::DrawImage(
+                    Some(image),
+                    source_rect.size,
+                    dest_rect,
+                    source_rect,
+                    smoothing
+                  ),
+                  release_shared_session ( source_chan,
+                    release_shared_session ( target_chan,
+                      terminate () ) ) ) )
+            }) )
+        )
+      })
+    });
+
+  run_session ( prog ).await;
 }
