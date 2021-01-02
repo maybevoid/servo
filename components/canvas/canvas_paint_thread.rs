@@ -26,7 +26,7 @@ pub enum ImageUpdate {
     Delete(ImageKey),
 }
 
-pub trait WebrenderApi : Send {
+pub trait WebrenderApi: Send {
     fn generate_key(&self) -> Result<webrender_api::ImageKey, ()>;
     fn update_images(&self, updates: Vec<ImageUpdate>);
     fn clone(&self) -> Box<dyn WebrenderApi>;

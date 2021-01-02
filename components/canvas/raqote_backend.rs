@@ -65,10 +65,7 @@ impl Backend for RaqoteBackend {
 
     fn create_drawtarget(&self, size: Size2D<u64>) -> Box<dyn GenericDrawTarget> {
         Box::new(DrawTarget {
-            target: raqote::DrawTarget::new(
-                size.width as i32,
-                size.height as i32,
-            )
+            target: raqote::DrawTarget::new(size.width as i32, size.height as i32),
         })
     }
 
@@ -353,14 +350,13 @@ fn create_gradient_stops(gradient_stops: Vec<CanvasGradientStop>) -> Vec<raqote:
 }
 
 struct DrawTarget {
-    target: raqote::DrawTarget
+    target: raqote::DrawTarget,
 }
 
 #[allow(unsafe_code)]
 unsafe impl Send for DrawTarget {}
 
-impl GenericDrawTarget for DrawTarget
-{
+impl GenericDrawTarget for DrawTarget {
     fn clear_rect(&mut self, rect: &Rect<f32>) {
         let mut pb = raqote::PathBuilder::new();
         pb.rect(
@@ -419,7 +415,7 @@ impl GenericDrawTarget for DrawTarget
         _format: SurfaceFormat,
     ) -> Box<dyn GenericDrawTarget> {
         Box::new(DrawTarget {
-            target: raqote::DrawTarget::new(size.width, size.height)
+            target: raqote::DrawTarget::new(size.width, size.height),
         })
     }
     fn create_source_surface_from_data(
@@ -493,7 +489,8 @@ impl GenericDrawTarget for DrawTarget
     fn fill(&mut self, path: &Path, pattern: canvas_data::Pattern, draw_options: &DrawOptions) {
         match draw_options.as_raqote().blend_mode {
             raqote::BlendMode::Src => {
-                self.target.clear(raqote::SolidSource::from_unpremultiplied_argb(0, 0, 0, 0));
+                self.target
+                    .clear(raqote::SolidSource::from_unpremultiplied_argb(0, 0, 0, 0));
                 self.target.fill(
                     path.as_raqote(),
                     &pattern.source(),
@@ -520,7 +517,8 @@ impl GenericDrawTarget for DrawTarget
                 let mut options = draw_options.as_raqote().clone();
                 self.target.push_layer_with_blend(1., options.blend_mode);
                 options.blend_mode = raqote::BlendMode::SrcOver;
-                self.target.fill(path.as_raqote(), &pattern.source(), &options);
+                self.target
+                    .fill(path.as_raqote(), &pattern.source(), &options);
                 self.target.pop_layer();
             },
             _ => warn!(

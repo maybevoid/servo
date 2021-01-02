@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #![deny(unsafe_code)]
-#![type_length_limit="3000000"]
+#![type_length_limit = "3000000"]
 
 #[macro_use]
 extern crate bitflags;

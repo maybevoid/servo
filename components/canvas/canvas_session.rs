@@ -5,7 +5,7 @@ use euclid::default::{Point2D, Rect, Size2D, Transform2D};
 use style::properties::style_structs::Font as FontStyleStruct;
 
 use crate::canvas_data::*;
-use crate::canvas_paint_thread::{WebrenderApi, AntialiasMode};
+use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
 use canvas_traits::canvas::*;
 use gfx::font_cache_thread::FontCacheThread;
 
@@ -91,32 +91,13 @@ define_choice! { CanvasOps;
   >
 }
 
-pub type CanvasSession = LinearToShared <
-  ExternalChoice <
-    CanvasOps
-  >
->;
+pub type CanvasSession = LinearToShared<ExternalChoice<CanvasOps>>;
 
-pub type CreateCanvasSession = LinearToShared <
-  ReceiveValue <
-    ( Size2D<u64>, bool ),
-    SendValue <
-      SharedChannel <
-        CanvasSession
-      >,
-      Z
-    >
-  >
->;
+pub type CreateCanvasSession =
+    LinearToShared<ReceiveValue<(Size2D<u64>, bool), SendValue<SharedChannel<CanvasSession>, Z>>>;
 
-pub fn canvas_session
-  ( mut canvas: CanvasData< 'static > ) ->
-    SharedSession <
-      CanvasSession
-    >
-{
-  accept_shared_session (
-    offer_choice! {
+pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSession> {
+    accept_shared_session(offer_choice! {
       Message => {
         receive_value! ( message => {
           match message {
@@ -281,23 +262,16 @@ pub fn canvas_session
           )
         })
       },
-    }
-  )
+    })
 }
 
 pub struct CanvasContext {
-  webrender_api: Box<dyn WebrenderApi>,
-  font_cache_thread: FontCacheThread,
+    webrender_api: Box<dyn WebrenderApi>,
+    font_cache_thread: FontCacheThread,
 }
 
-pub fn create_canvas_session
-  ( ctx: CanvasContext ) ->
-  SharedSession <
-    CreateCanvasSession
-  >
-{
-  accept_shared_session (
-    receive_value!( param => {
+pub fn create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasSession> {
+    accept_shared_session(receive_value!( param => {
       let (size, antialias) = param;
 
       let antialias_mode = if antialias {
@@ -321,41 +295,49 @@ pub fn create_canvas_session
         detach_shared_session (
           create_canvas_session ( ctx )
         ) )
-    } )
-  )
+    } ))
 }
 
-pub async fn draw_image_in_other
-  ( source: SharedChannel< CanvasSession >,
-    target: SharedChannel< CanvasSession >,
+pub async fn draw_image_in_other(
+    source: SharedChannel<CanvasSession>,
+    target: SharedChannel<CanvasSession>,
     image_size: Size2D<f64>,
     dest_rect: Rect<f64>,
     source_rect: Rect<f64>,
-    smoothing: bool
-  )
-{
-  let prog: Session<End> =
-    acquire_shared_session ( source, move | source_chan | async move {
-      acquire_shared_session ( target, move | target_chan | async move {
-        choose! ( source_chan, GetImageData,
-          send_value_to! ( source_chan, (source_rect.to_u64(), image_size.to_u64()),
-            receive_value_from ( source_chan, move | image: Vec<u8> | async move {
-              choose! ( target_chan, Message,
-                send_value_to! ( target_chan,
-                  CanvasMessage::DrawImage(
-                    Some(image),
-                    source_rect.size,
-                    dest_rect,
-                    source_rect,
-                    smoothing
-                  ),
-                  release_shared_session ( source_chan,
-                    release_shared_session ( target_chan,
-                      terminate () ) ) ) )
-            }) )
-        )
-      })
+    smoothing: bool,
+) {
+    let prog: Session<End> = acquire_shared_session(source, move |source_chan| async move {
+        acquire_shared_session(target, move |target_chan| async move {
+            choose!(
+                source_chan,
+                GetImageData,
+                send_value_to!(
+                    source_chan,
+                    (source_rect.to_u64(), image_size.to_u64()),
+                    receive_value_from(source_chan, move |image: Vec<u8>| async move {
+                        choose!(
+                            target_chan,
+                            Message,
+                            send_value_to!(
+                                target_chan,
+                                CanvasMessage::DrawImage(
+                                    Some(image),
+                                    source_rect.size,
+                                    dest_rect,
+                                    source_rect,
+                                    smoothing
+                                ),
+                                release_shared_session(
+                                    source_chan,
+                                    release_shared_session(target_chan, terminate())
+                                )
+                            )
+                        )
+                    })
+                )
+            )
+        })
     });
 
-  run_session ( prog ).await;
+    run_session(prog).await;
 }

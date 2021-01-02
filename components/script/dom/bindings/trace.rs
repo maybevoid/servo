@@ -70,6 +70,7 @@ use embedder_traits::{EventLoopWaker, MediaMetadata};
 use encoding_rs::{Decoder, Encoding};
 use euclid::default::{Point2D, Rect, Rotation3D, Transform2D};
 use euclid::Length as EuclidLength;
+use ferrite_session::{SharedChannel, SharedProtocol};
 use html5ever::buffer_queue::BufferQueue;
 use html5ever::{LocalName, Namespace, Prefix, QualName};
 use http::header::HeaderMap;
@@ -177,7 +178,6 @@ use webgpu::{
 };
 use webrender_api::{DocumentId, ExternalImageId, ImageKey};
 use webxr_api::{Finger, Hand, Ray, View};
-use ferrite_session::{SharedChannel, SharedProtocol};
 
 unsafe_no_jsmanaged_fields!(Tm);
 unsafe_no_jsmanaged_fields!(JoinHandle<()>);
@@ -932,9 +932,9 @@ unsafe impl JSTraceable for StyleLocked<MediaList> {
     }
 }
 
-unsafe impl <S> JSTraceable for SharedChannel<S>
+unsafe impl<S> JSTraceable for SharedChannel<S>
 where
-  S : SharedProtocol
+    S: SharedProtocol,
 {
     unsafe fn trace(&self, _trc: *mut JSTracer) {
         // Do nothing.

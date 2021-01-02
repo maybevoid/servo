@@ -69,7 +69,7 @@ impl PathState {
     }
 }
 
-pub trait Backend : Send {
+pub trait Backend: Send {
     fn get_composition_op(&self, opts: &DrawOptions) -> CompositionOp;
     fn need_to_draw_shadow(&self, color: &Color) -> bool;
     fn set_shadow_color<'a>(&mut self, color: RGBA, state: &mut CanvasPaintState<'a>);
@@ -96,7 +96,7 @@ pub trait Backend : Send {
 
 /// A generic PathBuilder that abstracts the interface for azure's and raqote's PathBuilder.
 /// TODO: De-abstract now that Azure is removed?
-pub trait GenericPathBuilder : Send {
+pub trait GenericPathBuilder: Send {
     fn arc(
         &mut self,
         origin: Point2D<f32>,
@@ -235,7 +235,7 @@ impl<'a> PathBuilderRef<'a> {
 // This defines required methods for DrawTarget of azure and raqote
 // The prototypes are derived from azure's methods.
 // TODO: De-abstract now that Azure is removed?
-pub trait GenericDrawTarget : Send {
+pub trait GenericDrawTarget: Send {
     fn clear_rect(&mut self, rect: &Rect<f32>);
     fn copy_surface(
         &mut self,
@@ -820,12 +820,7 @@ impl<'a> CanvasData<'a> {
         chan.send(result).unwrap();
     }
 
-    pub fn is_point_in_path_bool(
-        &mut self,
-        x: f64,
-        y: f64,
-        _fill_rule: FillRule,
-    ) -> bool {
+    pub fn is_point_in_path_bool(&mut self, x: f64, y: f64, _fill_rule: FillRule) -> bool {
         self.ensure_path();
         match self.path_state.as_ref() {
             Some(PathState::UserSpacePath(ref path, ref transform)) => {
@@ -1121,8 +1116,8 @@ impl<'a> CanvasData<'a> {
         match self.get_data() {
             Some(data) => {
                 chan.send(data).unwrap();
-            }
-            None => {}
+            },
+            None => {},
         }
     }
 
