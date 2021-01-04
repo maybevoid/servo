@@ -13,9 +13,11 @@ path = "lib.rs"
 [dependencies]
 app_units = "0.7"
 atomic_refcell = "0.1"
+canvas = { path = "../canvas" }
 canvas_traits = { path = "../canvas_traits" }
 crossbeam-channel = "0.4"
 euclid = "0.20"
+ferrite-session = { git = "https://github.com/maybevoid/ferrite" }
 fxhash = "0.2"
 gfx_traits = { path = "../gfx_traits" }
 html5ever = "0.25"

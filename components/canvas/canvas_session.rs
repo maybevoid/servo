@@ -1,5 +1,6 @@
 use ferrite_session::*;
 
+use serde;
 use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
 use style::properties::style_structs::Font as FontStyleStruct;
@@ -9,7 +10,7 @@ use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
 use canvas_traits::canvas::*;
 use gfx::font_cache_thread::FontCacheThread;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum CanvasMessage {
     Arc(Point2D<f32>, f32, f32, f32, bool),
     ArcTo(Point2D<f32>, Point2D<f32>, f32),
@@ -247,7 +248,7 @@ pub struct CanvasContext {
     font_cache_thread: FontCacheThread,
 }
 
-pub fn create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasSession> {
+pub fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasSession> {
     accept_shared_session(receive_value!( param => {
       let (size, antialias) = param;
 
@@ -270,9 +271,26 @@ pub fn create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasSe
 
       send_value! ( session,
         detach_shared_session (
-          create_canvas_session ( ctx )
+          run_create_canvas_session ( ctx )
         ) )
     } ))
+}
+
+pub fn create_canvas_session (
+  webrender_api: Box<dyn WebrenderApi>,
+  font_cache_thread: FontCacheThread
+) -> SharedChannel < CreateCanvasSession >
+{
+  let ctx = CanvasContext {
+    webrender_api: webrender_api,
+    font_cache_thread: font_cache_thread
+  };
+
+  let (channel, _) = run_shared_session (
+    run_create_canvas_session ( ctx )
+  );
+
+  channel
 }
 
 pub async fn draw_image_in_other(

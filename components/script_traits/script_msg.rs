@@ -15,7 +15,7 @@ use crate::StructuredSerializedData;
 use crate::WindowSizeType;
 use crate::WorkerGlobalScopeInit;
 use crate::WorkerScriptLoadOrigin;
-use canvas_traits::canvas::{CanvasId, CanvasMsg};
+use canvas::canvas_session::{CanvasSession};
 use devtools_traits::{ScriptToDevtoolsControlMsg, WorkerId};
 use embedder_traits::{EmbedderMsg, MediaSessionEvent};
 use euclid::default::Size2D as UntypedSize2D;
@@ -40,6 +40,7 @@ use style_traits::viewport::ViewportConstraints;
 use style_traits::CSSPixel;
 use webgpu::{wgpu, WebGPU, WebGPUResponseResult};
 use webrender_api::units::{DeviceIntPoint, DeviceIntSize};
+use ferrite_session::*;
 
 /// A particular iframe's size, associated with a browsing context.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -177,7 +178,7 @@ pub enum ScriptMsg {
     /// 2D canvases may use the GPU and we don't want to give untrusted content access to the GPU.)
     CreateCanvasPaintThread(
         UntypedSize2D<u64>,
-        IpcSender<(IpcSender<CanvasMsg>, CanvasId)>,
+        IpcSender<SharedChannel<CanvasSession>>,
     ),
     /// Notifies the constellation that this frame has received focus.
     Focus,

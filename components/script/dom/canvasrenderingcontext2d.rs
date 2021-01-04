@@ -24,10 +24,11 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::textmetrics::TextMetrics;
-use canvas_traits::canvas::{Canvas2dMsg, CanvasId, CanvasMsg};
+use async_std::task;
+use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::{Point2D, Rect, Size2D};
-use ipc_channel::ipc::IpcSender;
+use ferrite_session::*;
 use servo_url::ServoUrl;
 use std::mem;
 
@@ -50,10 +51,11 @@ impl CanvasRenderingContext2D {
         CanvasRenderingContext2D {
             reflector_: Reflector::new(),
             canvas: canvas.map(Dom::from_ref),
-            canvas_state: CanvasState::new(
-                global,
-                Size2D::new(size.width as u64, size.height as u64),
-            ),
+            canvas_state: task::block_on(
+                CanvasState::new(
+                    global,
+                    Size2D::new(size.width as u64, size.height as u64),
+                )),
         }
     }
 
@@ -70,16 +72,16 @@ impl CanvasRenderingContext2D {
         reflect_dom_object(boxed, global)
     }
 
+    pub fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
+        self.canvas_state.get_canvas_session()
+    }
+
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
     pub fn set_bitmap_dimensions(&self, size: Size2D<u32>) {
         self.reset_to_initial_state();
-        self.canvas_state
-            .get_ipc_renderer()
-            .send(CanvasMsg::Recreate(
-                size.to_u64(),
-                self.canvas_state.get_canvas_id(),
-            ))
-            .unwrap();
+        task::block_on(
+            self.canvas_state
+                .set_bitmap_dimensions(size.to_u64()));
     }
 
     // https://html.spec.whatwg.org/multipage/#reset-the-rendering-context-to-its-default-state
@@ -88,7 +90,8 @@ impl CanvasRenderingContext2D {
     }
 
     pub fn set_canvas_bitmap_dimensions(&self, size: Size2D<u64>) {
-        self.canvas_state.set_bitmap_dimensions(size);
+        task::block_on(
+            self.canvas_state.set_bitmap_dimensions(size));
     }
 
     pub fn mark_as_dirty(&self) {
@@ -103,19 +106,6 @@ impl CanvasRenderingContext2D {
         )
     }
 
-    pub fn get_canvas_id(&self) -> CanvasId {
-        self.canvas_state.get_canvas_id()
-    }
-
-    pub fn send_canvas_2d_msg(&self, msg: Canvas2dMsg) {
-        self.canvas_state.send_canvas_2d_msg(msg)
-    }
-
-    // TODO: Remove this
-    pub fn get_ipc_renderer(&self) -> IpcSender<CanvasMsg> {
-        self.canvas_state.get_ipc_renderer().clone()
-    }
-
     pub fn origin_is_clean(&self) -> bool {
         self.canvas_state.origin_is_clean()
     }
@@ -125,33 +115,20 @@ impl CanvasRenderingContext2D {
             Point2D::new(rect.origin.x as u64, rect.origin.y as u64),
             Size2D::new(rect.size.width as u64, rect.size.height as u64),
         );
-        self.canvas_state.get_rect(
-            self.canvas
-                .as_ref()
-                .map_or(Size2D::zero(), |c| c.get_size().to_u64()),
-            rect,
-        )
+        task::block_on(
+            self.canvas_state.get_rect(
+                self.canvas
+                    .as_ref()
+                    .map_or(Size2D::zero(), |c| c.get_size().to_u64()),
+                rect,
+            ))
     }
 }
 
-pub trait LayoutCanvasRenderingContext2DHelpers {
+impl LayoutDom<'_, CanvasRenderingContext2D> {
     #[allow(unsafe_code)]
-    unsafe fn get_ipc_renderer(self) -> IpcSender<CanvasMsg>;
-    fn get_canvas_id(self) -> CanvasId;
-}
-
-impl LayoutCanvasRenderingContext2DHelpers for LayoutDom<'_, CanvasRenderingContext2D> {
-    #[allow(unsafe_code)]
-    unsafe fn get_ipc_renderer(self) -> IpcSender<CanvasMsg> {
-        (*self.unsafe_get()).canvas_state.get_ipc_renderer().clone()
-    }
-
-    #[allow(unsafe_code)]
-    fn get_canvas_id(self) -> CanvasId {
-        // FIXME(nox): This relies on the fact that CanvasState::get_canvas_id
-        // does nothing fancy but it would be easier to trust a
-        // LayoutDom<_>-like type that would wrap the &CanvasState.
-        unsafe { self.unsafe_get().canvas_state.get_canvas_id() }
+    pub unsafe fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
+        self.unsafe_get().get_canvas_session()
     }
 }
 
@@ -174,48 +151,57 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-save
     fn Save(&self) {
-        self.canvas_state.save()
+        task::block_on(
+            self.canvas_state.save())
     }
 
     #[allow(unrooted_must_root)]
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-restore
     fn Restore(&self) {
-        self.canvas_state.restore()
+        task::block_on(
+            self.canvas_state.restore())
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-scale
     fn Scale(&self, x: f64, y: f64) {
-        self.canvas_state.scale(x, y)
+        task::block_on(
+            self.canvas_state.scale(x, y))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-rotate
     fn Rotate(&self, angle: f64) {
-        self.canvas_state.rotate(angle)
+        task::block_on(
+            self.canvas_state.rotate(angle))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-translate
     fn Translate(&self, x: f64, y: f64) {
-        self.canvas_state.translate(x, y)
+        task::block_on(
+            self.canvas_state.translate(x, y))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-transform
     fn Transform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
-        self.canvas_state.transform(a, b, c, d, e, f)
+        task::block_on(
+            self.canvas_state.transform(a, b, c, d, e, f))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
     fn GetTransform(&self) -> DomRoot<DOMMatrix> {
-        self.canvas_state.get_transform(&self.global())
+        task::block_on(
+            self.canvas_state.get_transform(&self.global()))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-settransform
     fn SetTransform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
-        self.canvas_state.set_transform(a, b, c, d, e, f)
+        task::block_on(
+            self.canvas_state.set_transform(a, b, c, d, e, f))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-resettransform
     fn ResetTransform(&self) {
-        self.canvas_state.reset_transform()
+        task::block_on(
+            self.canvas_state.reset_transform())
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalalpha
@@ -225,7 +211,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalalpha
     fn SetGlobalAlpha(&self, alpha: f64) {
-        self.canvas_state.set_global_alpha(alpha)
+        task::block_on(
+            self.canvas_state.set_global_alpha(alpha))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalcompositeoperation
@@ -235,64 +222,75 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalcompositeoperation
     fn SetGlobalCompositeOperation(&self, op_str: DOMString) {
-        self.canvas_state.set_global_composite_operation(op_str)
+        task::block_on(
+            self.canvas_state.set_global_composite_operation(op_str))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-fillrect
     fn FillRect(&self, x: f64, y: f64, width: f64, height: f64) {
-        self.canvas_state.fill_rect(x, y, width, height);
+        task::block_on(
+            self.canvas_state.fill_rect(x, y, width, height));
         self.mark_as_dirty();
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-clearrect
     fn ClearRect(&self, x: f64, y: f64, width: f64, height: f64) {
-        self.canvas_state.clear_rect(x, y, width, height);
+        task::block_on(
+            self.canvas_state.clear_rect(x, y, width, height));
         self.mark_as_dirty();
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-strokerect
     fn StrokeRect(&self, x: f64, y: f64, width: f64, height: f64) {
-        self.canvas_state.stroke_rect(x, y, width, height);
+        task::block_on(
+            self.canvas_state.stroke_rect(x, y, width, height));
         self.mark_as_dirty();
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-beginpath
     fn BeginPath(&self) {
-        self.canvas_state.begin_path()
+        task::block_on(
+            self.canvas_state.begin_path())
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-closepath
     fn ClosePath(&self) {
-        self.canvas_state.close_path()
+        task::block_on(
+            self.canvas_state.close_path())
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-fill
     fn Fill(&self, fill_rule: CanvasFillRule) {
-        self.canvas_state.fill(fill_rule);
+        task::block_on(
+            self.canvas_state.fill(fill_rule));
         self.mark_as_dirty();
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-stroke
     fn Stroke(&self) {
-        self.canvas_state.stroke();
+        task::block_on(
+            self.canvas_state.stroke());
         self.mark_as_dirty();
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-clip
     fn Clip(&self, fill_rule: CanvasFillRule) {
-        self.canvas_state.clip(fill_rule)
+        task::block_on(
+            self.canvas_state.clip(fill_rule))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ispointinpath
     fn IsPointInPath(&self, x: f64, y: f64, fill_rule: CanvasFillRule) -> bool {
-        self.canvas_state
-            .is_point_in_path(&self.global(), x, y, fill_rule)
+        task::block_on(
+            self.canvas_state
+            .is_point_in_path(&self.global(), x, y, fill_rule))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-filltext
     fn FillText(&self, text: DOMString, x: f64, y: f64, max_width: Option<f64>) {
-        self.canvas_state
-            .fill_text(self.canvas.as_ref().map(|c| &**c), text, x, y, max_width);
+        task::block_on(
+            self.canvas_state
+            .fill_text(self.canvas.as_ref().map(|c| &**c), text, x, y, max_width));
         self.mark_as_dirty();
     }
 
@@ -308,8 +306,9 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-font
     fn SetFont(&self, value: DOMString) {
-        self.canvas_state
-            .set_font(self.canvas.as_ref().map(|c| &**c), value)
+        task::block_on(
+            self.canvas_state
+            .set_font(self.canvas.as_ref().map(|c| &**c), value))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textalign
@@ -319,7 +318,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textalign
     fn SetTextAlign(&self, value: CanvasTextAlign) {
-        self.canvas_state.set_text_align(value)
+        task::block_on(
+            self.canvas_state.set_text_align(value))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textbaseline
@@ -329,7 +329,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textbaseline
     fn SetTextBaseline(&self, value: CanvasTextBaseline) {
-        self.canvas_state.set_text_baseline(value)
+        task::block_on(
+            self.canvas_state.set_text_baseline(value))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-direction
@@ -344,8 +345,9 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
     fn DrawImage(&self, image: CanvasImageSource, dx: f64, dy: f64) -> ErrorResult {
-        self.canvas_state
-            .draw_image(self.canvas.as_ref().map(|c| &**c), image, dx, dy)
+        task::block_on(
+            self.canvas_state
+            .draw_image(self.canvas.as_ref().map(|c| &**c), image, dx, dy))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
@@ -357,8 +359,9 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
         dw: f64,
         dh: f64,
     ) -> ErrorResult {
-        self.canvas_state
-            .draw_image_(self.canvas.as_ref().map(|c| &**c), image, dx, dy, dw, dh)
+        task::block_on(
+            self.canvas_state
+            .draw_image_(self.canvas.as_ref().map(|c| &**c), image, dx, dy, dw, dh))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
@@ -374,7 +377,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
         dw: f64,
         dh: f64,
     ) -> ErrorResult {
-        self.canvas_state.draw_image__(
+        task::block_on(
+            self.canvas_state.draw_image__(
             self.canvas.as_ref().map(|c| &**c),
             image,
             sx,
@@ -385,43 +389,50 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
             dy,
             dw,
             dh,
-        )
+        ))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-moveto
     fn MoveTo(&self, x: f64, y: f64) {
-        self.canvas_state.move_to(x, y)
+        task::block_on(
+            self.canvas_state.move_to(x, y))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-lineto
     fn LineTo(&self, x: f64, y: f64) {
-        self.canvas_state.line_to(x, y)
+        task::block_on(
+            self.canvas_state.line_to(x, y))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-rect
     fn Rect(&self, x: f64, y: f64, width: f64, height: f64) {
-        self.canvas_state.rect(x, y, width, height)
+        task::block_on(
+            self.canvas_state.rect(x, y, width, height))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-quadraticcurveto
     fn QuadraticCurveTo(&self, cpx: f64, cpy: f64, x: f64, y: f64) {
-        self.canvas_state.quadratic_curve_to(cpx, cpy, x, y)
+        task::block_on(
+            self.canvas_state.quadratic_curve_to(cpx, cpy, x, y))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-beziercurveto
     fn BezierCurveTo(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
-        self.canvas_state
-            .bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y)
+        task::block_on(
+            self.canvas_state
+            .bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-arc
     fn Arc(&self, x: f64, y: f64, r: f64, start: f64, end: f64, ccw: bool) -> ErrorResult {
-        self.canvas_state.arc(x, y, r, start, end, ccw)
+        task::block_on(
+            self.canvas_state.arc(x, y, r, start, end, ccw))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-arcto
     fn ArcTo(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, r: f64) -> ErrorResult {
-        self.canvas_state.arc_to(cp1x, cp1y, cp2x, cp2y, r)
+        task::block_on(
+            self.canvas_state.arc_to(cp1x, cp1y, cp2x, cp2y, r))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ellipse
@@ -436,8 +447,9 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
         end: f64,
         ccw: bool,
     ) -> ErrorResult {
-        self.canvas_state
-            .ellipse(x, y, rx, ry, rotation, start, end, ccw)
+        task::block_on(
+            self.canvas_state
+            .ellipse(x, y, rx, ry, rotation, start, end, ccw))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-imagesmoothingenabled
@@ -485,7 +497,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-getimagedata
     fn GetImageData(&self, sx: i32, sy: i32, sw: i32, sh: i32) -> Fallible<DomRoot<ImageData>> {
-        self.canvas_state.get_image_data(
+        task::block_on(
+            self.canvas_state.get_image_data(
             self.canvas
                 .as_ref()
                 .map_or(Size2D::zero(), |c| c.get_size().to_u64()),
@@ -494,19 +507,20 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
             sy,
             sw,
             sh,
-        )
+        ))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata
     fn PutImageData(&self, imagedata: &ImageData, dx: i32, dy: i32) {
-        self.canvas_state.put_image_data(
+        task::block_on(
+            self.canvas_state.put_image_data(
             self.canvas
                 .as_ref()
                 .map_or(Size2D::zero(), |c| c.get_size().to_u64()),
             imagedata,
             dx,
             dy,
-        )
+        ))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata
@@ -521,7 +535,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
         dirty_width: i32,
         dirty_height: i32,
     ) {
-        self.canvas_state.put_image_data_(
+        task::block_on(
+            self.canvas_state.put_image_data_(
             self.canvas
                 .as_ref()
                 .map_or(Size2D::zero(), |c| c.get_size().to_u64()),
@@ -532,7 +547,7 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
             dirty_y,
             dirty_width,
             dirty_height,
-        );
+        ));
         self.mark_as_dirty();
     }
 
@@ -579,7 +594,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linewidth
     fn SetLineWidth(&self, width: f64) {
-        self.canvas_state.set_line_width(width)
+        task::block_on(
+            self.canvas_state.set_line_width(width))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linecap
@@ -589,7 +605,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linecap
     fn SetLineCap(&self, cap: CanvasLineCap) {
-        self.canvas_state.set_line_cap(cap)
+        task::block_on(
+            self.canvas_state.set_line_cap(cap))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linejoin
@@ -599,7 +616,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linejoin
     fn SetLineJoin(&self, join: CanvasLineJoin) {
-        self.canvas_state.set_line_join(join)
+        task::block_on(
+            self.canvas_state.set_line_join(join))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-miterlimit
@@ -609,7 +627,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-miterlimit
     fn SetMiterLimit(&self, limit: f64) {
-        self.canvas_state.set_miter_limit(limit)
+        task::block_on(
+            self.canvas_state.set_miter_limit(limit))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsetx
@@ -619,7 +638,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsetx
     fn SetShadowOffsetX(&self, value: f64) {
-        self.canvas_state.set_shadow_offset_x(value)
+        task::block_on(
+            self.canvas_state.set_shadow_offset_x(value))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsety
@@ -629,7 +649,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsety
     fn SetShadowOffsetY(&self, value: f64) {
-        self.canvas_state.set_shadow_offset_y(value)
+        task::block_on(
+            self.canvas_state.set_shadow_offset_y(value))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowblur
@@ -639,7 +660,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowblur
     fn SetShadowBlur(&self, value: f64) {
-        self.canvas_state.set_shadow_blur(value)
+        task::block_on(
+            self.canvas_state.set_shadow_blur(value))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowcolor
@@ -649,18 +671,7 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowcolor
     fn SetShadowColor(&self, value: DOMString) {
-        self.canvas_state.set_shadow_color(value)
-    }
-}
-
-impl Drop for CanvasRenderingContext2D {
-    fn drop(&mut self) {
-        if let Err(err) = self
-            .canvas_state
-            .get_ipc_renderer()
-            .send(CanvasMsg::Close(self.canvas_state.get_canvas_id()))
-        {
-            warn!("Could not close canvas: {}", err)
-        }
+        task::block_on(
+            self.canvas_state.set_shadow_color(value))
     }
 }

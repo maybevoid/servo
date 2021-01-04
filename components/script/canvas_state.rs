@@ -23,15 +23,15 @@ use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::element::cors_setting_for_element;
 use crate::dom::element::Element;
 use crate::dom::globalscope::GlobalScope;
-use crate::dom::htmlcanvaselement::{CanvasContext, HTMLCanvasElement};
+use crate::dom::htmlcanvaselement::{HTMLCanvasElement};
 use crate::dom::imagedata::ImageData;
 use crate::dom::node::{window_from_node, Node, NodeDamage};
-use crate::dom::offscreencanvas::{OffscreenCanvas, OffscreenCanvasContext};
+// use crate::dom::offscreencanvas::{OffscreenCanvas, OffscreenCanvasContext};
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use crate::dom::textmetrics::TextMetrics;
 use crate::unpremultiplytable::UNPREMULTIPLY_TABLE;
-use canvas_traits::canvas::{Canvas2dMsg, CanvasId, CanvasMsg, Direction, TextAlign, TextBaseline};
 use canvas_traits::canvas::{CompositionOrBlending, FillOrStrokeStyle, FillRule};
+use canvas_traits::canvas::{Direction, TextAlign, TextBaseline};
 use canvas_traits::canvas::{LineCapStyle, LineJoinStyle, LinearGradientStyle};
 use canvas_traits::canvas::{RadialGradientStyle, RepetitionStyle};
 use cssparser::Color as CSSColor;
@@ -40,13 +40,11 @@ use euclid::{
     default::{Point2D, Rect, Size2D, Transform2D},
     vec2,
 };
-use ipc_channel::ipc::{self, IpcSender};
 use net_traits::image_cache::{ImageCache, ImageResponse};
 use net_traits::request::CorsSettings;
 use pixels::PixelFormat;
 use profile_traits::ipc as profiled_ipc;
 use script_traits::ScriptMsg;
-use serde_bytes::ByteBuf;
 use servo_url::{ImmutableOrigin, ServoUrl};
 use std::cell::Cell;
 use std::fmt;
@@ -56,6 +54,9 @@ use style::properties::longhands::font_variant_caps::computed_value::T as FontVa
 use style::properties::style_structs::Font;
 use style::values::computed::font::FontStyle;
 use style_traits::values::ToCss;
+
+use canvas::canvas_session::*;
+use ferrite_session::*;
 
 #[unrooted_must_root_lint::must_root]
 #[derive(Clone, JSTraceable, MallocSizeOf)]
@@ -130,9 +131,8 @@ impl CanvasContextState {
 #[unrooted_must_root_lint::must_root]
 #[derive(JSTraceable, MallocSizeOf)]
 pub(crate) struct CanvasState {
-    #[ignore_malloc_size_of = "Defined in ipc-channel"]
-    ipc_renderer: IpcSender<CanvasMsg>,
-    canvas_id: CanvasId,
+    #[ignore_malloc_size_of = "Channels are hard"]
+    session: SharedChannel<CanvasSession>,
     state: DomRefCell<CanvasContextState>,
     origin_clean: Cell<bool>,
     #[ignore_malloc_size_of = "Arc"]
@@ -147,7 +147,10 @@ pub(crate) struct CanvasState {
 }
 
 impl CanvasState {
-    pub(crate) fn new(global: &GlobalScope, size: Size2D<u64>) -> CanvasState {
+    pub(crate) async fn new(
+        global: &GlobalScope,
+        size: Size2D<u64>,
+    ) -> CanvasState {
         debug!("Creating new canvas rendering context.");
         let (sender, receiver) =
             profiled_ipc::channel(global.time_profiler_chan().clone()).unwrap();
@@ -156,7 +159,8 @@ impl CanvasState {
         script_to_constellation_chan
             .send(ScriptMsg::CreateCanvasPaintThread(size, sender))
             .unwrap();
-        let (ipc_renderer, canvas_id) = receiver.recv().unwrap();
+        let session = receiver.recv().unwrap();
+
         debug!("Done.");
         // Worklets always receive a unique origin. This messes with fetching
         // cached images in the case of paint worklets, since the image cache
@@ -166,9 +170,9 @@ impl CanvasState {
         } else {
             global.origin().immutable().clone()
         };
+
         CanvasState {
-            ipc_renderer: ipc_renderer,
-            canvas_id: canvas_id,
+            session: session,
             state: DomRefCell::new(CanvasContextState::new()),
             origin_clean: Cell::new(true),
             image_cache: global.image_cache(),
@@ -179,30 +183,30 @@ impl CanvasState {
         }
     }
 
-    pub fn get_ipc_renderer(&self) -> &IpcSender<CanvasMsg> {
-        &self.ipc_renderer
+    pub fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
+        self.session.clone()
     }
 
     pub fn get_missing_image_urls(&self) -> &DomRefCell<Vec<ServoUrl>> {
         &self.missing_image_urls
     }
 
-    pub fn get_canvas_id(&self) -> CanvasId {
-        self.canvas_id.clone()
-    }
-
-    pub fn send_canvas_2d_msg(&self, msg: Canvas2dMsg) {
-        self.ipc_renderer
-            .send(CanvasMsg::Canvas2d(msg, self.get_canvas_id()))
-            .unwrap()
+    pub async fn send_canvas_message(&self, message: CanvasMessage) {
+        run_session(acquire_shared_session! ( self.session, chan => {
+            choose! ( chan, Message,
+                send_value_to! ( chan, message,
+                    release_shared_session (chan,
+                        terminate! () ) ) )
+        }))
+        .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
-    pub fn set_bitmap_dimensions(&self, size: Size2D<u64>) {
+    pub async fn set_bitmap_dimensions(&self, size: Size2D<u64>) {
         self.reset_to_initial_state();
-        self.ipc_renderer
-            .send(CanvasMsg::Recreate(size, self.get_canvas_id()))
-            .unwrap();
+
+        self.send_canvas_message(CanvasMessage::Recreate(size))
+            .await
     }
 
     pub fn reset_to_initial_state(&self) {
@@ -324,14 +328,23 @@ impl CanvasState {
         }
     }
 
-    pub fn get_rect(&self, canvas_size: Size2D<u64>, rect: Rect<u64>) -> Vec<u8> {
+    pub async fn get_rect(&self, canvas_size: Size2D<u64>, rect: Rect<u64>) -> Vec<u8> {
         assert!(self.origin_is_clean());
 
         assert!(Rect::from_size(canvas_size).contains_rect(&rect));
 
-        let (sender, receiver) = ipc::bytes_channel().unwrap();
-        self.send_canvas_2d_msg(Canvas2dMsg::GetImageData(rect, canvas_size, sender));
-        let mut pixels = receiver.recv().unwrap().to_vec();
+        let prog: Session<SendValue<Vec<u8>, End>> = acquire_shared_session! ( self.session, chan => {
+            choose! ( chan, GetImageData,
+                send_value_to! ( chan, (rect, canvas_size),
+                    receive_value_from! ( chan, image => {
+                        release_shared_session ( chan,
+                            send_value! ( image,
+                                terminate! () ) )
+                    }))
+            )
+        });
+
+        let mut pixels = run_session_with_result(prog).await;
 
         for chunk in pixels.chunks_mut(4) {
             let b = chunk[0];
@@ -364,7 +377,7 @@ impl CanvasState {
     // is copied on the rectangle (dx, dy, dh, dw) of the destination canvas
     //
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
-    fn draw_image_internal(
+    async fn draw_image_internal(
         &self,
         htmlcanvas: Option<&HTMLCanvasElement>,
         image: CanvasImageSource,
@@ -384,7 +397,8 @@ impl CanvasState {
                     return Err(Error::InvalidState);
                 }
 
-                self.draw_html_canvas_element(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
+                Err(Error::InvalidState)
+                // self.draw_html_canvas_element(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
             },
             CanvasImageSource::OffscreenCanvas(ref canvas) => {
                 // https://html.spec.whatwg.org/multipage/#check-the-usability-of-the-image-argument
@@ -392,7 +406,8 @@ impl CanvasState {
                     return Err(Error::InvalidState);
                 }
 
-                self.draw_offscreen_canvas(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
+                Err(Error::InvalidState)
+                // self.draw_offscreen_canvas(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
             },
             CanvasImageSource::HTMLImageElement(ref image) => {
                 // https://html.spec.whatwg.org/multipage/#drawing-images
@@ -421,6 +436,7 @@ impl CanvasState {
                     dw,
                     dh,
                 )
+                .await
             },
             CanvasImageSource::CSSStyleValue(ref value) => {
                 let url = value
@@ -429,6 +445,7 @@ impl CanvasState {
                 self.fetch_and_draw_image_data(
                     htmlcanvas, url, None, sx, sy, sw, sh, dx, dy, dw, dh,
                 )
+                .await
             },
         };
 
@@ -438,125 +455,125 @@ impl CanvasState {
         result
     }
 
-    fn draw_offscreen_canvas(
-        &self,
-        canvas: &OffscreenCanvas,
-        htmlcanvas: Option<&HTMLCanvasElement>,
-        sx: f64,
-        sy: f64,
-        sw: Option<f64>,
-        sh: Option<f64>,
-        dx: f64,
-        dy: f64,
-        dw: Option<f64>,
-        dh: Option<f64>,
-    ) -> ErrorResult {
-        let canvas_size = canvas.get_size();
-        let dw = dw.unwrap_or(canvas_size.width as f64);
-        let dh = dh.unwrap_or(canvas_size.height as f64);
-        let sw = sw.unwrap_or(canvas_size.width as f64);
-        let sh = sh.unwrap_or(canvas_size.height as f64);
+    // fn draw_offscreen_canvas(
+    //     &self,
+    //     canvas: &OffscreenCanvas,
+    //     htmlcanvas: Option<&HTMLCanvasElement>,
+    //     sx: f64,
+    //     sy: f64,
+    //     sw: Option<f64>,
+    //     sh: Option<f64>,
+    //     dx: f64,
+    //     dy: f64,
+    //     dw: Option<f64>,
+    //     dh: Option<f64>,
+    // ) -> ErrorResult {
+    //     let canvas_size = canvas.get_size();
+    //     let dw = dw.unwrap_or(canvas_size.width as f64);
+    //     let dh = dh.unwrap_or(canvas_size.height as f64);
+    //     let sw = sw.unwrap_or(canvas_size.width as f64);
+    //     let sh = sh.unwrap_or(canvas_size.height as f64);
 
-        let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
-        // 2. Establish the source and destination rectangles
-        let (source_rect, dest_rect) =
-            self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
+    //     let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
+    //     // 2. Establish the source and destination rectangles
+    //     let (source_rect, dest_rect) =
+    //         self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
 
-        if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
-            return Ok(());
-        }
+    //     if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
+    //         return Ok(());
+    //     }
 
-        let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
+    //     let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
 
-        if let Some(context) = canvas.context() {
-            match *context {
-                OffscreenCanvasContext::OffscreenContext2d(ref context) => {
-                    context.send_canvas_2d_msg(Canvas2dMsg::DrawImageInOther(
-                        self.get_canvas_id(),
-                        image_size,
-                        dest_rect,
-                        source_rect,
-                        smoothing_enabled,
-                    ));
-                },
-            }
-        } else {
-            self.send_canvas_2d_msg(Canvas2dMsg::DrawImage(
-                None,
-                image_size,
-                dest_rect,
-                source_rect,
-                smoothing_enabled,
-            ));
-        }
+    //     if let Some(context) = canvas.context() {
+    //         match *context {
+    //             OffscreenCanvasContext::OffscreenContext2d(ref context) => {
+    //                 context.send_canvas_2d_msg(Canvas2dMsg::DrawImageInOther(
+    //                     self.get_canvas_id(),
+    //                     image_size,
+    //                     dest_rect,
+    //                     source_rect,
+    //                     smoothing_enabled,
+    //                 ));
+    //             },
+    //         }
+    //     } else {
+    //         self.send_canvas_message(CanvasMessage::DrawImage(
+    //             None,
+    //             image_size,
+    //             dest_rect,
+    //             source_rect,
+    //             smoothing_enabled,
+    //         ));
+    //     }
 
-        self.mark_as_dirty(htmlcanvas);
-        Ok(())
-    }
+    //     self.mark_as_dirty(htmlcanvas);
+    //     Ok(())
+    // }
 
-    fn draw_html_canvas_element(
-        &self,
-        canvas: &HTMLCanvasElement,             // source canvas
-        htmlcanvas: Option<&HTMLCanvasElement>, // destination canvas
-        sx: f64,
-        sy: f64,
-        sw: Option<f64>,
-        sh: Option<f64>,
-        dx: f64,
-        dy: f64,
-        dw: Option<f64>,
-        dh: Option<f64>,
-    ) -> ErrorResult {
-        // 1. Check the usability of the image argument
-        if !canvas.is_valid() {
-            return Err(Error::InvalidState);
-        }
+    // fn draw_html_canvas_element(
+    //     &self,
+    //     canvas: &HTMLCanvasElement,             // source canvas
+    //     htmlcanvas: Option<&HTMLCanvasElement>, // destination canvas
+    //     sx: f64,
+    //     sy: f64,
+    //     sw: Option<f64>,
+    //     sh: Option<f64>,
+    //     dx: f64,
+    //     dy: f64,
+    //     dw: Option<f64>,
+    //     dh: Option<f64>,
+    // ) -> ErrorResult {
+    //     // 1. Check the usability of the image argument
+    //     if !canvas.is_valid() {
+    //         return Err(Error::InvalidState);
+    //     }
 
-        let canvas_size = canvas.get_size();
-        let dw = dw.unwrap_or(canvas_size.width as f64);
-        let dh = dh.unwrap_or(canvas_size.height as f64);
-        let sw = sw.unwrap_or(canvas_size.width as f64);
-        let sh = sh.unwrap_or(canvas_size.height as f64);
+    //     let canvas_size = canvas.get_size();
+    //     let dw = dw.unwrap_or(canvas_size.width as f64);
+    //     let dh = dh.unwrap_or(canvas_size.height as f64);
+    //     let sw = sw.unwrap_or(canvas_size.width as f64);
+    //     let sh = sh.unwrap_or(canvas_size.height as f64);
 
-        let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
-        // 2. Establish the source and destination rectangles
-        let (source_rect, dest_rect) =
-            self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
+    //     let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
+    //     // 2. Establish the source and destination rectangles
+    //     let (source_rect, dest_rect) =
+    //         self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
 
-        if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
-            return Ok(());
-        }
+    //     if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
+    //         return Ok(());
+    //     }
 
-        let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
+    //     let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
 
-        if let Some(context) = canvas.context() {
-            match *context {
-                CanvasContext::Context2d(ref context) => {
-                    context.send_canvas_2d_msg(Canvas2dMsg::DrawImageInOther(
-                        self.get_canvas_id(),
-                        image_size,
-                        dest_rect,
-                        source_rect,
-                        smoothing_enabled,
-                    ));
-                },
-                _ => return Err(Error::InvalidState),
-            }
-        } else {
-            self.send_canvas_2d_msg(Canvas2dMsg::DrawImage(
-                None,
-                image_size,
-                dest_rect,
-                source_rect,
-                smoothing_enabled,
-            ));
-        }
+    //     if let Some(context) = canvas.context() {
+    //         match *context {
+    //             CanvasContext::Context2d(ref context) => {
+    //                 context.send_canvas_message(CanvasMessage::DrawImageInOther(
+    //                     self.get_canvas_id(),
+    //                     image_size,
+    //                     dest_rect,
+    //                     source_rect,
+    //                     smoothing_enabled,
+    //                 ));
+    //             },
+    //             _ => return Err(Error::InvalidState),
+    //         }
+    //     } else {
+    //         self.send_canvas_message(CanvasMessage::DrawImage(
+    //             None,
+    //             image_size,
+    //             dest_rect,
+    //             source_rect,
+    //             smoothing_enabled,
+    //         ));
+    //     }
 
-        self.mark_as_dirty(htmlcanvas);
-        Ok(())
-    }
+    //     self.mark_as_dirty(htmlcanvas);
+    //     Ok(())
+    // }
 
-    fn fetch_and_draw_image_data(
+    async fn fetch_and_draw_image_data(
         &self,
         canvas: Option<&HTMLCanvasElement>,
         url: ServoUrl,
@@ -591,13 +608,14 @@ impl CanvasState {
         }
 
         let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
-        self.send_canvas_2d_msg(Canvas2dMsg::DrawImage(
-            Some(ByteBuf::from(image_data)),
+        self.send_canvas_message(CanvasMessage::DrawImage(
+            Some(image_data),
             image_size,
             dest_rect,
             source_rect,
             smoothing_enabled,
-        ));
+        ))
+        .await;
         self.mark_as_dirty(canvas);
         Ok(())
     }
@@ -672,30 +690,34 @@ impl CanvasState {
         (source_rect, dest_rect)
     }
 
-    fn update_transform(&self) {
-        self.send_canvas_2d_msg(Canvas2dMsg::SetTransform(self.state.borrow().transform))
+    async fn update_transform(&self) {
+        self.send_canvas_message(CanvasMessage::SetTransform(self.state.borrow().transform))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-fillrect
-    pub fn fill_rect(&self, x: f64, y: f64, width: f64, height: f64) {
+    pub async fn fill_rect(&self, x: f64, y: f64, width: f64, height: f64) {
         if let Some(rect) = self.create_drawable_rect(x, y, width, height) {
             let style = self.state.borrow().fill_style.to_fill_or_stroke_style();
-            self.send_canvas_2d_msg(Canvas2dMsg::FillRect(rect, style));
+            self.send_canvas_message(CanvasMessage::FillRect(rect, style))
+                .await;
         }
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-clearrect
-    pub fn clear_rect(&self, x: f64, y: f64, width: f64, height: f64) {
+    pub async fn clear_rect(&self, x: f64, y: f64, width: f64, height: f64) {
         if let Some(rect) = self.create_drawable_rect(x, y, width, height) {
-            self.send_canvas_2d_msg(Canvas2dMsg::ClearRect(rect));
+            self.send_canvas_message(CanvasMessage::ClearRect(rect))
+                .await;
         }
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-strokerect
-    pub fn stroke_rect(&self, x: f64, y: f64, width: f64, height: f64) {
+    pub async fn stroke_rect(&self, x: f64, y: f64, width: f64, height: f64) {
         if let Some(rect) = self.create_drawable_rect(x, y, width, height) {
             let style = self.state.borrow().stroke_style.to_fill_or_stroke_style();
-            self.send_canvas_2d_msg(Canvas2dMsg::StrokeRect(rect, style));
+            self.send_canvas_message(CanvasMessage::StrokeRect(rect, style))
+                .await;
         }
     }
 
@@ -705,12 +727,13 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsetx
-    pub fn set_shadow_offset_x(&self, value: f64) {
+    pub async fn set_shadow_offset_x(&self, value: f64) {
         if !value.is_finite() || value == self.state.borrow().shadow_offset_x {
             return;
         }
         self.state.borrow_mut().shadow_offset_x = value;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetShadowOffsetX(value))
+        self.send_canvas_message(CanvasMessage::SetShadowOffsetX(value))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsety
@@ -719,12 +742,13 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsety
-    pub fn set_shadow_offset_y(&self, value: f64) {
+    pub async fn set_shadow_offset_y(&self, value: f64) {
         if !value.is_finite() || value == self.state.borrow().shadow_offset_y {
             return;
         }
         self.state.borrow_mut().shadow_offset_y = value;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetShadowOffsetY(value))
+        self.send_canvas_message(CanvasMessage::SetShadowOffsetY(value))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowblur
@@ -733,12 +757,13 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowblur
-    pub fn set_shadow_blur(&self, value: f64) {
+    pub async fn set_shadow_blur(&self, value: f64) {
         if !value.is_finite() || value < 0f64 || value == self.state.borrow().shadow_blur {
             return;
         }
         self.state.borrow_mut().shadow_blur = value;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetShadowBlur(value))
+        self.send_canvas_message(CanvasMessage::SetShadowBlur(value))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowcolor
@@ -749,10 +774,11 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowcolor
-    pub fn set_shadow_color(&self, value: DOMString) {
+    pub async fn set_shadow_color(&self, value: DOMString) {
         if let Ok(color) = parse_color(&value) {
             self.state.borrow_mut().shadow_color = color;
-            self.send_canvas_2d_msg(Canvas2dMsg::SetShadowColor(color))
+            self.send_canvas_message(CanvasMessage::SetShadowColor(color))
+                .await
         }
     }
 
@@ -945,20 +971,21 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-save
-    pub fn save(&self) {
+    pub async fn save(&self) {
         self.saved_states
             .borrow_mut()
             .push(self.state.borrow().clone());
-        self.send_canvas_2d_msg(Canvas2dMsg::SaveContext);
+        self.send_canvas_message(CanvasMessage::SaveContext).await;
     }
 
     #[allow(unrooted_must_root)]
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-restore
-    pub fn restore(&self) {
+    pub async fn restore(&self) {
         let mut saved_states = self.saved_states.borrow_mut();
         if let Some(state) = saved_states.pop() {
             self.state.borrow_mut().clone_from(&state);
-            self.send_canvas_2d_msg(Canvas2dMsg::RestoreContext);
+            self.send_canvas_message(CanvasMessage::RestoreContext)
+                .await;
         }
     }
 
@@ -968,13 +995,14 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalalpha
-    pub fn set_global_alpha(&self, alpha: f64) {
+    pub async fn set_global_alpha(&self, alpha: f64) {
         if !alpha.is_finite() || alpha > 1.0 || alpha < 0.0 {
             return;
         }
 
         self.state.borrow_mut().global_alpha = alpha;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetGlobalAlpha(alpha as f32))
+        self.send_canvas_message(CanvasMessage::SetGlobalAlpha(alpha as f32))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalcompositeoperation
@@ -986,10 +1014,11 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalcompositeoperation
-    pub fn set_global_composite_operation(&self, op_str: DOMString) {
+    pub async fn set_global_composite_operation(&self, op_str: DOMString) {
         if let Ok(op) = CompositionOrBlending::from_str(&op_str) {
             self.state.borrow_mut().global_composition = op;
-            self.send_canvas_2d_msg(Canvas2dMsg::SetGlobalComposition(op))
+            self.send_canvas_message(CanvasMessage::SetGlobalComposition(op))
+                .await
         }
     }
 
@@ -1004,7 +1033,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-filltext
-    pub fn fill_text(
+    pub async fn fill_text(
         &self,
         canvas: Option<&HTMLCanvasElement>,
         text: DOMString,
@@ -1020,6 +1049,7 @@ impl CanvasState {
         }
         if self.state.borrow().font_style.is_none() {
             self.set_font(canvas, CanvasContextState::DEFAULT_FONT_STYLE.into())
+                .await;
         }
 
         let is_rtl = match self.state.borrow().direction {
@@ -1029,14 +1059,15 @@ impl CanvasState {
         };
 
         let style = self.state.borrow().fill_style.to_fill_or_stroke_style();
-        self.send_canvas_2d_msg(Canvas2dMsg::FillText(
+        self.send_canvas_message(CanvasMessage::FillText(
             text.into(),
             x,
             y,
             max_width,
             style,
             is_rtl,
-        ));
+        ))
+        .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#textmetrics
@@ -1049,7 +1080,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-font
-    pub fn set_font(&self, canvas: Option<&HTMLCanvasElement>, value: DOMString) {
+    pub async fn set_font(&self, canvas: Option<&HTMLCanvasElement>, value: DOMString) {
         let canvas = match canvas {
             Some(element) => element,
             None => return, // offscreen canvas doesn't have a placeholder canvas
@@ -1061,7 +1092,8 @@ impl CanvasState {
             None => return, // syntax error
         };
         self.state.borrow_mut().font_style = Some((*resolved_font_style).clone());
-        self.send_canvas_2d_msg(Canvas2dMsg::SetFont((*resolved_font_style).clone()));
+        self.send_canvas_message(CanvasMessage::SetFont((*resolved_font_style).clone()))
+            .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-font
@@ -1088,7 +1120,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textalign
-    pub fn set_text_align(&self, value: CanvasTextAlign) {
+    pub async fn set_text_align(&self, value: CanvasTextAlign) {
         let text_align = match value {
             CanvasTextAlign::Start => TextAlign::Start,
             CanvasTextAlign::End => TextAlign::End,
@@ -1097,7 +1129,8 @@ impl CanvasState {
             CanvasTextAlign::Center => TextAlign::Center,
         };
         self.state.borrow_mut().text_align = text_align;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetTextAlign(text_align));
+        self.send_canvas_message(CanvasMessage::SetTextAlign(text_align))
+            .await;
     }
 
     pub fn text_baseline(&self) -> CanvasTextBaseline {
@@ -1111,7 +1144,7 @@ impl CanvasState {
         }
     }
 
-    pub fn set_text_baseline(&self, value: CanvasTextBaseline) {
+    pub async fn set_text_baseline(&self, value: CanvasTextBaseline) {
         let text_baseline = match value {
             CanvasTextBaseline::Top => TextBaseline::Top,
             CanvasTextBaseline::Hanging => TextBaseline::Hanging,
@@ -1121,7 +1154,8 @@ impl CanvasState {
             CanvasTextBaseline::Bottom => TextBaseline::Bottom,
         };
         self.state.borrow_mut().text_baseline = text_baseline;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetTextBaseline(text_baseline));
+        self.send_canvas_message(CanvasMessage::SetTextBaseline(text_baseline))
+            .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-direction
@@ -1149,13 +1183,14 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linewidth
-    pub fn set_line_width(&self, width: f64) {
+    pub async fn set_line_width(&self, width: f64) {
         if !width.is_finite() || width <= 0.0 {
             return;
         }
 
         self.state.borrow_mut().line_width = width;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetLineWidth(width as f32))
+        self.send_canvas_message(CanvasMessage::SetLineWidth(width as f32))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linecap
@@ -1168,14 +1203,15 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linecap
-    pub fn set_line_cap(&self, cap: CanvasLineCap) {
+    pub async fn set_line_cap(&self, cap: CanvasLineCap) {
         let line_cap = match cap {
             CanvasLineCap::Butt => LineCapStyle::Butt,
             CanvasLineCap::Round => LineCapStyle::Round,
             CanvasLineCap::Square => LineCapStyle::Square,
         };
         self.state.borrow_mut().line_cap = line_cap;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetLineCap(line_cap));
+        self.send_canvas_message(CanvasMessage::SetLineCap(line_cap))
+            .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linejoin
@@ -1188,14 +1224,15 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linejoin
-    pub fn set_line_join(&self, join: CanvasLineJoin) {
+    pub async fn set_line_join(&self, join: CanvasLineJoin) {
         let line_join = match join {
             CanvasLineJoin::Round => LineJoinStyle::Round,
             CanvasLineJoin::Bevel => LineJoinStyle::Bevel,
             CanvasLineJoin::Miter => LineJoinStyle::Miter,
         };
         self.state.borrow_mut().line_join = line_join;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetLineJoin(line_join));
+        self.send_canvas_message(CanvasMessage::SetLineJoin(line_join))
+            .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-miterlimit
@@ -1204,13 +1241,14 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-miterlimit
-    pub fn set_miter_limit(&self, limit: f64) {
+    pub async fn set_miter_limit(&self, limit: f64) {
         if !limit.is_finite() || limit <= 0.0 {
             return;
         }
 
         self.state.borrow_mut().miter_limit = limit;
-        self.send_canvas_2d_msg(Canvas2dMsg::SetMiterLimit(limit as f32))
+        self.send_canvas_message(CanvasMessage::SetMiterLimit(limit as f32))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-createimagedata
@@ -1236,7 +1274,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-getimagedata
-    pub fn get_image_data(
+    pub async fn get_image_data(
         &self,
         canvas_size: Size2D<u64>,
         global: &GlobalScope,
@@ -1269,12 +1307,12 @@ impl CanvasState {
             global,
             size.width,
             size.height,
-            Some(self.get_rect(canvas_size, read_rect)),
+            Some(self.get_rect(canvas_size, read_rect).await),
         )
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata
-    pub fn put_image_data(
+    pub async fn put_image_data(
         &self,
         canvas_size: Size2D<u64>,
         imagedata: &ImageData,
@@ -1291,11 +1329,12 @@ impl CanvasState {
             imagedata.Width() as i32,
             imagedata.Height() as i32,
         )
+        .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata
     #[allow(unsafe_code)]
-    pub fn put_image_data_(
+    pub async fn put_image_data_(
         &self,
         canvas_size: Size2D<u64>,
         imagedata: &ImageData,
@@ -1341,14 +1380,15 @@ impl CanvasState {
         };
 
         // Step 7.
-        let (sender, receiver) = ipc::bytes_channel().unwrap();
-        let pixels = unsafe { &imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size)) };
-        self.send_canvas_2d_msg(Canvas2dMsg::PutImageData(dst_rect, receiver));
-        sender.send(pixels).unwrap();
+        let pixels: Vec<u8> =
+            Vec::from(unsafe { imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size)) });
+
+        self.send_canvas_message(CanvasMessage::PutImageData(dst_rect, pixels))
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
-    pub fn draw_image(
+    pub async fn draw_image(
         &self,
         canvas: Option<&HTMLCanvasElement>,
         image: CanvasImageSource,
@@ -1360,10 +1400,11 @@ impl CanvasState {
         }
 
         self.draw_image_internal(canvas, image, 0f64, 0f64, None, None, dx, dy, None, None)
+            .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
-    pub fn draw_image_(
+    pub async fn draw_image_(
         &self,
         canvas: Option<&HTMLCanvasElement>,
         image: CanvasImageSource,
@@ -1388,10 +1429,11 @@ impl CanvasState {
             Some(dw),
             Some(dh),
         )
+        .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
-    pub fn draw_image__(
+    pub async fn draw_image__(
         &self,
         canvas: Option<&HTMLCanvasElement>,
         image: CanvasImageSource,
@@ -1428,36 +1470,37 @@ impl CanvasState {
             Some(dw),
             Some(dh),
         )
+        .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-beginpath
-    pub fn begin_path(&self) {
-        self.send_canvas_2d_msg(Canvas2dMsg::BeginPath);
+    pub async fn begin_path(&self) {
+        self.send_canvas_message(CanvasMessage::BeginPath).await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-fill
-    pub fn fill(&self, _fill_rule: CanvasFillRule) {
+    pub async fn fill(&self, _fill_rule: CanvasFillRule) {
         // TODO: Process fill rule
         let style = self.state.borrow().fill_style.to_fill_or_stroke_style();
-        self.send_canvas_2d_msg(Canvas2dMsg::Fill(style));
+        self.send_canvas_message(CanvasMessage::Fill(style)).await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-stroke
-    pub fn stroke(&self) {
+    pub async fn stroke(&self) {
         let style = self.state.borrow().stroke_style.to_fill_or_stroke_style();
-        self.send_canvas_2d_msg(Canvas2dMsg::Stroke(style));
+        self.send_canvas_message(CanvasMessage::Stroke(style)).await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-clip
-    pub fn clip(&self, _fill_rule: CanvasFillRule) {
+    pub async fn clip(&self, _fill_rule: CanvasFillRule) {
         // TODO: Process fill rule
-        self.send_canvas_2d_msg(Canvas2dMsg::Clip);
+        self.send_canvas_message(CanvasMessage::Clip).await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ispointinpath
-    pub fn is_point_in_path(
+    pub async fn is_point_in_path(
         &self,
-        global: &GlobalScope,
+        _global: &GlobalScope,
         x: f64,
         y: f64,
         fill_rule: CanvasFillRule,
@@ -1470,25 +1513,32 @@ impl CanvasState {
             CanvasFillRule::Nonzero => FillRule::Nonzero,
             CanvasFillRule::Evenodd => FillRule::Evenodd,
         };
-        let (sender, receiver) =
-            profiled_ipc::channel::<bool>(global.time_profiler_chan().clone()).unwrap();
-        self.send_canvas_2d_msg(Canvas2dMsg::IsPointInPath(x, y, fill_rule, sender));
-        receiver.recv().unwrap()
+
+        run_session_with_result(acquire_shared_session! ( self.session, chan => {
+            choose! ( chan, IsPointInPath,
+                send_value_to! ( chan, (x, y, fill_rule),
+                    receive_value_from! ( chan, result => {
+                        release_shared_session ( chan,
+                            send_value! ( result,
+                                terminate () ) )
+                    }) ) )
+        }))
+        .await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-scale
-    pub fn scale(&self, x: f64, y: f64) {
+    pub async fn scale(&self, x: f64, y: f64) {
         if !(x.is_finite() && y.is_finite()) {
             return;
         }
 
         let transform = self.state.borrow().transform;
         self.state.borrow_mut().transform = transform.pre_scale(x as f32, y as f32);
-        self.update_transform()
+        self.update_transform().await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-rotate
-    pub fn rotate(&self, angle: f64) {
+    pub async fn rotate(&self, angle: f64) {
         if angle == 0.0 || !angle.is_finite() {
             return;
         }
@@ -1503,22 +1553,22 @@ impl CanvasState {
             0.0,
             0.0,
         ));
-        self.update_transform()
+        self.update_transform().await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-translate
-    pub fn translate(&self, x: f64, y: f64) {
+    pub async fn translate(&self, x: f64, y: f64) {
         if !(x.is_finite() && y.is_finite()) {
             return;
         }
 
         let transform = self.state.borrow().transform;
         self.state.borrow_mut().transform = transform.pre_translate(vec2(x as f32, y as f32));
-        self.update_transform()
+        self.update_transform().await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-transform
-    pub fn transform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
+    pub async fn transform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
         if !(a.is_finite() &&
             b.is_finite() &&
             c.is_finite() &&
@@ -1533,20 +1583,26 @@ impl CanvasState {
         self.state.borrow_mut().transform = transform.pre_transform(&Transform2D::row_major(
             a as f32, b as f32, c as f32, d as f32, e as f32, f as f32,
         ));
-        self.update_transform()
+        self.update_transform().await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
-    pub fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
-        let (sender, receiver) = ipc::channel::<Transform2D<f32>>().unwrap();
-        self.send_canvas_2d_msg(Canvas2dMsg::GetTransform(sender));
-        let transform = receiver.recv().unwrap();
+    pub async fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
+        let transform = run_session_with_result(acquire_shared_session! ( self.session, chan => {
+            choose! ( chan, GetTransform,
+                receive_value_from! ( chan, transform => {
+                    release_shared_session ( chan,
+                        send_value! ( transform,
+                            terminate () ))
+                } ))
+        }))
+        .await;
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-settransform
-    pub fn set_transform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
+    pub async fn set_transform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
         if !(a.is_finite() &&
             b.is_finite() &&
             c.is_finite() &&
@@ -1559,60 +1615,71 @@ impl CanvasState {
 
         self.state.borrow_mut().transform =
             Transform2D::row_major(a as f32, b as f32, c as f32, d as f32, e as f32, f as f32);
-        self.update_transform()
+        self.update_transform().await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-resettransform
-    pub fn reset_transform(&self) {
+    pub async fn reset_transform(&self) {
         self.state.borrow_mut().transform = Transform2D::identity();
-        self.update_transform()
+        self.update_transform().await
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-closepath
-    pub fn close_path(&self) {
-        self.send_canvas_2d_msg(Canvas2dMsg::ClosePath);
+    pub async fn close_path(&self) {
+        self.send_canvas_message(CanvasMessage::ClosePath).await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-moveto
-    pub fn move_to(&self, x: f64, y: f64) {
+    pub async fn move_to(&self, x: f64, y: f64) {
         if !(x.is_finite() && y.is_finite()) {
             return;
         }
-        self.send_canvas_2d_msg(Canvas2dMsg::MoveTo(Point2D::new(x as f32, y as f32)));
+        self.send_canvas_message(CanvasMessage::MoveTo(Point2D::new(x as f32, y as f32)))
+            .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-lineto
-    pub fn line_to(&self, x: f64, y: f64) {
+    pub async fn line_to(&self, x: f64, y: f64) {
         if !(x.is_finite() && y.is_finite()) {
             return;
         }
-        self.send_canvas_2d_msg(Canvas2dMsg::LineTo(Point2D::new(x as f32, y as f32)));
+        self.send_canvas_message(CanvasMessage::LineTo(Point2D::new(x as f32, y as f32)))
+            .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-rect
-    pub fn rect(&self, x: f64, y: f64, width: f64, height: f64) {
+    pub async fn rect(&self, x: f64, y: f64, width: f64, height: f64) {
         if [x, y, width, height].iter().all(|val| val.is_finite()) {
             let rect = Rect::new(
                 Point2D::new(x as f32, y as f32),
                 Size2D::new(width as f32, height as f32),
             );
-            self.send_canvas_2d_msg(Canvas2dMsg::Rect(rect));
+            self.send_canvas_message(CanvasMessage::Rect(rect)).await;
         }
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-quadraticcurveto
-    pub fn quadratic_curve_to(&self, cpx: f64, cpy: f64, x: f64, y: f64) {
+    pub async fn quadratic_curve_to(&self, cpx: f64, cpy: f64, x: f64, y: f64) {
         if !(cpx.is_finite() && cpy.is_finite() && x.is_finite() && y.is_finite()) {
             return;
         }
-        self.send_canvas_2d_msg(Canvas2dMsg::QuadraticCurveTo(
+        self.send_canvas_message(CanvasMessage::QuadraticCurveTo(
             Point2D::new(cpx as f32, cpy as f32),
             Point2D::new(x as f32, y as f32),
-        ));
+        ))
+        .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-beziercurveto
-    pub fn bezier_curve_to(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
+    pub async fn bezier_curve_to(
+        &self,
+        cp1x: f64,
+        cp1y: f64,
+        cp2x: f64,
+        cp2y: f64,
+        x: f64,
+        y: f64,
+    ) {
         if !(cp1x.is_finite() &&
             cp1y.is_finite() &&
             cp2x.is_finite() &&
@@ -1622,15 +1689,24 @@ impl CanvasState {
         {
             return;
         }
-        self.send_canvas_2d_msg(Canvas2dMsg::BezierCurveTo(
+        self.send_canvas_message(CanvasMessage::BezierCurveTo(
             Point2D::new(cp1x as f32, cp1y as f32),
             Point2D::new(cp2x as f32, cp2y as f32),
             Point2D::new(x as f32, y as f32),
-        ));
+        ))
+        .await;
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-arc
-    pub fn arc(&self, x: f64, y: f64, r: f64, start: f64, end: f64, ccw: bool) -> ErrorResult {
+    pub async fn arc(
+        &self,
+        x: f64,
+        y: f64,
+        r: f64,
+        start: f64,
+        end: f64,
+        ccw: bool,
+    ) -> ErrorResult {
         if !([x, y, r, start, end].iter().all(|x| x.is_finite())) {
             return Ok(());
         }
@@ -1639,18 +1715,19 @@ impl CanvasState {
             return Err(Error::IndexSize);
         }
 
-        self.send_canvas_2d_msg(Canvas2dMsg::Arc(
+        self.send_canvas_message(CanvasMessage::Arc(
             Point2D::new(x as f32, y as f32),
             r as f32,
             start as f32,
             end as f32,
             ccw,
-        ));
+        ))
+        .await;
         Ok(())
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-arcto
-    pub fn arc_to(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, r: f64) -> ErrorResult {
+    pub async fn arc_to(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, r: f64) -> ErrorResult {
         if !([cp1x, cp1y, cp2x, cp2y, r].iter().all(|x| x.is_finite())) {
             return Ok(());
         }
@@ -1658,16 +1735,17 @@ impl CanvasState {
             return Err(Error::IndexSize);
         }
 
-        self.send_canvas_2d_msg(Canvas2dMsg::ArcTo(
+        self.send_canvas_message(CanvasMessage::ArcTo(
             Point2D::new(cp1x as f32, cp1y as f32),
             Point2D::new(cp2x as f32, cp2y as f32),
             r as f32,
-        ));
+        ))
+        .await;
         Ok(())
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ellipse
-    pub fn ellipse(
+    pub async fn ellipse(
         &self,
         x: f64,
         y: f64,
@@ -1688,7 +1766,7 @@ impl CanvasState {
             return Err(Error::IndexSize);
         }
 
-        self.send_canvas_2d_msg(Canvas2dMsg::Ellipse(
+        self.send_canvas_message(CanvasMessage::Ellipse(
             Point2D::new(x as f32, y as f32),
             rx as f32,
             ry as f32,
@@ -1696,7 +1774,8 @@ impl CanvasState {
             start as f32,
             end as f32,
             ccw,
-        ));
+        ))
+        .await;
         Ok(())
     }
 }

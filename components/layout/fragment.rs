@@ -21,12 +21,12 @@ use crate::text::TextRunScanner;
 use crate::wrapper::ThreadSafeLayoutNodeHelpers;
 use crate::ServoArc;
 use app_units::Au;
-use canvas_traits::canvas::{CanvasId, CanvasMsg};
+use canvas::canvas_session::*;
 use euclid::default::{Point2D, Rect, Size2D, Vector2D};
+use ferrite_session::*;
 use gfx::text::glyph::ByteIndex;
 use gfx::text::text_run::{TextRun, TextRunSlice};
 use gfx_traits::StackingContextId;
-use ipc_channel::ipc::IpcSender;
 use msg::constellation_msg::{BrowsingContextId, PipelineId};
 use net_traits::image::base::{Image, ImageMetadata};
 use net_traits::image_cache::{ImageOrMetadataAvailable, UsePlaceholder};
@@ -40,7 +40,7 @@ use servo_url::ServoUrl;
 use std::borrow::ToOwned;
 use std::cmp::{max, min, Ordering};
 use std::collections::LinkedList;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::{f32, fmt};
 use style::computed_values::border_collapse::T as BorderCollapse;
 use style::computed_values::box_sizing::T as BoxSizing;
@@ -337,7 +337,7 @@ impl InlineAbsoluteFragmentInfo {
 #[derive(Clone)]
 pub enum CanvasFragmentSource {
     WebGL(webrender_api::ImageKey),
-    Image(Option<Arc<Mutex<IpcSender<CanvasMsg>>>>),
+    Image(Option<SharedChannel<CanvasSession>>),
     WebGPU(webrender_api::ImageKey),
 }
 
@@ -346,16 +346,13 @@ pub struct CanvasFragmentInfo {
     pub source: CanvasFragmentSource,
     pub dom_width: Au,
     pub dom_height: Au,
-    pub canvas_id: CanvasId,
 }
 
 impl CanvasFragmentInfo {
     pub fn new(data: HTMLCanvasData) -> CanvasFragmentInfo {
         let source = match data.source {
             HTMLCanvasDataSource::WebGL(texture_id) => CanvasFragmentSource::WebGL(texture_id),
-            HTMLCanvasDataSource::Image(ipc_sender) => CanvasFragmentSource::Image(
-                ipc_sender.map(|renderer| Arc::new(Mutex::new(renderer))),
-            ),
+            HTMLCanvasDataSource::Image(session) => CanvasFragmentSource::Image(session),
             HTMLCanvasDataSource::WebGPU(image_key) => CanvasFragmentSource::WebGPU(image_key),
         };
 
@@ -363,7 +360,6 @@ impl CanvasFragmentInfo {
             source: source,
             dom_width: Au::from_px(data.width as i32),
             dom_height: Au::from_px(data.height as i32),
-            canvas_id: data.canvas_id,
         }
     }
 }

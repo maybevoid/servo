@@ -17,7 +17,7 @@ use crate::dom::bindings::reflector::DomObject;
 use crate::dom::bindings::root::{Dom, DomRoot, LayoutDom};
 use crate::dom::bindings::str::{DOMString, USVString};
 use crate::dom::canvasrenderingcontext2d::{
-    CanvasRenderingContext2D, LayoutCanvasRenderingContext2DHelpers,
+    CanvasRenderingContext2D,
 };
 use crate::dom::document::Document;
 use crate::dom::element::{AttributeMutation, Element, LayoutElementHelpers};
@@ -31,18 +31,19 @@ use crate::dom::virtualmethods::VirtualMethods;
 use crate::dom::webgl2renderingcontext::WebGL2RenderingContext;
 use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
+use async_std::task;
 use base64;
-use canvas_traits::canvas::{CanvasId, CanvasMsg, FromScriptMsg};
+use canvas::canvas_session::*;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
 use dom_struct::dom_struct;
 use euclid::default::{Rect, Size2D};
+use ferrite_session::*;
 use html5ever::{LocalName, Prefix};
 use image::png::PngEncoder;
 use image::ColorType;
 use ipc_channel::ipc::{self as ipcchan, IpcSharedMemory};
 use js::error::throw_type_error;
 use js::rust::HandleValue;
-use profile_traits::ipc;
 use script_layout_interface::{HTMLCanvasData, HTMLCanvasDataSource};
 use script_traits::ScriptMsg;
 use servo_media::streams::registry::MediaStreamId;
@@ -128,7 +129,6 @@ pub trait LayoutHTMLCanvasElementHelpers {
     fn data(self) -> HTMLCanvasData;
     fn get_width(self) -> LengthOrPercentageOrAuto;
     fn get_height(self) -> LengthOrPercentageOrAuto;
-    fn get_canvas_id_for_layout(self) -> CanvasId;
 }
 
 impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
@@ -137,7 +137,7 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
         let source = unsafe {
             match self.unsafe_get().context.borrow_for_layout().as_ref() {
                 Some(&CanvasContext::Context2d(ref context)) => {
-                    HTMLCanvasDataSource::Image(Some(context.to_layout().get_ipc_renderer()))
+                    HTMLCanvasDataSource::Image(Some(context.to_layout().get_canvas_session()))
                 },
                 Some(&CanvasContext::WebGL(ref context)) => {
                     context.to_layout().canvas_data_source()
@@ -162,7 +162,6 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
             source: source,
             width: width_attr.map_or(DEFAULT_WIDTH, |val| val.as_uint()),
             height: height_attr.map_or(DEFAULT_HEIGHT, |val| val.as_uint()),
-            canvas_id: self.get_canvas_id_for_layout(),
         }
     }
 
@@ -178,19 +177,6 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
             .get_attr_for_layout(&ns!(), &local_name!("height"))
             .map(AttrValue::as_uint_px_dimension)
             .unwrap_or(LengthOrPercentageOrAuto::Auto)
-    }
-
-    #[allow(unsafe_code)]
-    fn get_canvas_id_for_layout(self) -> CanvasId {
-        unsafe {
-            let canvas = &*self.unsafe_get();
-            if let &Some(CanvasContext::Context2d(ref context)) = canvas.context.borrow_for_layout()
-            {
-                context.to_layout().get_canvas_id()
-            } else {
-                CanvasId(0)
-            }
-        }
     }
 }
 
@@ -314,15 +300,16 @@ impl HTMLCanvasElement {
 
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
-                let (sender, receiver) =
-                    ipc::channel(self.global().time_profiler_chan().clone()).unwrap();
-                let msg = CanvasMsg::FromScript(
-                    FromScriptMsg::SendPixels(sender),
-                    context.get_canvas_id(),
-                );
-                context.get_ipc_renderer().send(msg).unwrap();
+                let data = task::block_on(
+                    run_session_with_result(
+                        acquire_shared_session!(context.get_canvas_session(), chan =>
+                            choose!(chan, FromScript,
+                                receive_value_from!(chan, data =>
+                                    release_shared_session(chan,
+                                        send_value(data,
+                                            terminate())))))));
 
-                Some(receiver.recv().unwrap())
+                Some(IpcSharedMemory::from_bytes(&data))
             },
             Some(&CanvasContext::WebGL(_)) => {
                 // TODO: add a method in WebGLRenderingContext to get the pixels.

@@ -886,7 +886,7 @@ fn create_constellation(
         Box::new(FontCacheWR(compositor_proxy.clone())),
     );
 
-    let (canvas_chan, ipc_canvas_chan) = CanvasPaintThread::start(
+    let canvas_session = canvas::canvas_session::create_canvas_session(
         Box::new(CanvasWebrenderApi(compositor_proxy.clone())),
         font_cache_thread.clone(),
     );
@@ -926,8 +926,7 @@ fn create_constellation(
         opts.is_running_problem_test,
         opts.hard_fail,
         opts.enable_canvas_antialiasing,
-        canvas_chan,
-        ipc_canvas_chan,
+        canvas_session,
     );
 
     constellation_chan
