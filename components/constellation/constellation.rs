@@ -105,8 +105,8 @@ use async_std::task;
 use background_hang_monitor::HangMonitorRegister;
 use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
+use canvas::canvas_session::{CanvasSession, CreateCanvasSession};
 use canvas_traits::webgl::WebGLThreads;
-use canvas::canvas_session::{CreateCanvasSession, CanvasSession};
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;
 use compositing::compositor_thread::WebrenderMsg;
@@ -119,6 +119,7 @@ use devtools_traits::{
 use embedder_traits::{Cursor, EmbedderMsg, EmbedderProxy, EventLoopWaker};
 use embedder_traits::{MediaSessionEvent, MediaSessionPlaybackState};
 use euclid::{default::Size2D as UntypedSize2D, Size2D};
+use ferrite_session::*;
 use gfx::font_cache_thread::FontCacheThread;
 use gfx_traits::Epoch;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
@@ -183,7 +184,6 @@ use style_traits::viewport::ViewportConstraints;
 use style_traits::CSSPixel;
 use webgpu::{self, WebGPU, WebGPURequest};
 use webrender_traits::WebrenderExternalImageRegistry;
-use ferrite_session::*;
 
 type PendingApprovalNavigations = HashMap<PipelineId, (LoadData, HistoryEntryReplacement)>;
 
@@ -753,7 +753,7 @@ where
         is_running_problem_test: bool,
         hard_fail: bool,
         enable_canvas_antialiasing: bool,
-        canvas_session: SharedChannel < CreateCanvasSession >
+        canvas_session: SharedChannel<CreateCanvasSession>,
     ) -> Sender<FromCompositorMsg> {
         let (compositor_sender, compositor_receiver) = unbounded();
 
@@ -1821,11 +1821,10 @@ where
                     warn!("Error replying to remove iframe ({})", e);
                 }
             },
-            FromScriptMsg::CreateCanvasPaintThread(size, sender) => {
-                task::block_on(async move {
-                    self.handle_create_canvas_paint_thread_msg(size, sender).await
-                })
-            },
+            FromScriptMsg::CreateCanvasPaintThread(size, sender) => task::block_on(async move {
+                self.handle_create_canvas_paint_thread_msg(size, sender)
+                    .await
+            }),
             FromScriptMsg::SetDocumentState(state) => {
                 self.document_states.insert(source_pipeline_id, state);
             },
@@ -4374,15 +4373,16 @@ where
         response_sender: IpcSender<SharedChannel<CanvasSession>>,
     ) {
         let antialias = self.enable_canvas_antialiasing;
-        let canvas = run_session_with_result(
-            acquire_shared_session!(self.canvas_session, chan =>
-                send_value_to!( chan, (size, antialias),
-                    receive_value_from!(chan, canvas =>
-                        release_shared_session(chan,
-                            send_value!(canvas,
-                                terminate()))
-                    )))
-        ).await;
+        let canvas = run_session_with_result(acquire_shared_session!(self.canvas_session, chan =>
+        send_value_to!( chan, (size, antialias),
+            receive_value_from!(chan, canvas =>
+                release_shared_session(chan,
+                    send_value!(canvas,
+                        terminate()))
+            ))))
+        .await;
+
+        debug!("created canvas");
 
         response_sender.send(canvas).unwrap();
     }

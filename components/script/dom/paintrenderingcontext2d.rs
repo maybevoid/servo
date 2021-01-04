@@ -56,14 +56,14 @@ impl PaintRenderingContext2D {
     }
 
     pub fn send_data(&self, sender: IpcSender<CanvasImageData>) {
-        let m_data = task::block_on(
-            run_session_with_result(
-                acquire_shared_session!(self.context.get_canvas_session(), chan =>
+        let m_data = task::block_on(run_session_with_result(
+            acquire_shared_session!(self.context.get_canvas_session(), chan =>
                     choose!(chan, FromLayout,
                         receive_value_from!(chan, data =>
                             release_shared_session(chan,
                                 send_value(data,
-                                    terminate())))))));
+                                    terminate()))))),
+        ));
 
         match m_data {
             Some(data) => sender.send(data).unwrap(),

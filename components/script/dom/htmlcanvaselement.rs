@@ -16,9 +16,7 @@ use crate::dom::bindings::num::Finite;
 use crate::dom::bindings::reflector::DomObject;
 use crate::dom::bindings::root::{Dom, DomRoot, LayoutDom};
 use crate::dom::bindings::str::{DOMString, USVString};
-use crate::dom::canvasrenderingcontext2d::{
-    CanvasRenderingContext2D,
-};
+use crate::dom::canvasrenderingcontext2d::CanvasRenderingContext2D;
 use crate::dom::document::Document;
 use crate::dom::element::{AttributeMutation, Element, LayoutElementHelpers};
 use crate::dom::globalscope::GlobalScope;
@@ -300,14 +298,14 @@ impl HTMLCanvasElement {
 
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
-                let data = task::block_on(
-                    run_session_with_result(
-                        acquire_shared_session!(context.get_canvas_session(), chan =>
+                let data = task::block_on(run_session_with_result(
+                    acquire_shared_session!(context.get_canvas_session(), chan =>
                             choose!(chan, FromScript,
                                 receive_value_from!(chan, data =>
                                     release_shared_session(chan,
                                         send_value(data,
-                                            terminate())))))));
+                                            terminate()))))),
+                ));
 
                 Some(IpcSharedMemory::from_bytes(&data))
             },

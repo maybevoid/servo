@@ -1,8 +1,8 @@
 use ferrite_session::*;
 
-use serde;
 use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
+use serde;
 use style::properties::style_structs::Font as FontStyleStruct;
 
 use crate::canvas_data::*;
@@ -276,21 +276,18 @@ pub fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanv
     } ))
 }
 
-pub fn create_canvas_session (
-  webrender_api: Box<dyn WebrenderApi>,
-  font_cache_thread: FontCacheThread
-) -> SharedChannel < CreateCanvasSession >
-{
-  let ctx = CanvasContext {
-    webrender_api: webrender_api,
-    font_cache_thread: font_cache_thread
-  };
+pub fn create_canvas_session(
+    webrender_api: Box<dyn WebrenderApi>,
+    font_cache_thread: FontCacheThread,
+) -> SharedChannel<CreateCanvasSession> {
+    let ctx = CanvasContext {
+        webrender_api: webrender_api,
+        font_cache_thread: font_cache_thread,
+    };
 
-  let (channel, _) = run_shared_session (
-    run_create_canvas_session ( ctx )
-  );
+    let (channel, _) = run_shared_session(run_create_canvas_session(ctx));
 
-  channel
+    channel
 }
 
 pub async fn draw_image_in_other(

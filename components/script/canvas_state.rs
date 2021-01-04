@@ -23,7 +23,7 @@ use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::element::cors_setting_for_element;
 use crate::dom::element::Element;
 use crate::dom::globalscope::GlobalScope;
-use crate::dom::htmlcanvaselement::{HTMLCanvasElement};
+use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::node::{window_from_node, Node, NodeDamage};
 // use crate::dom::offscreencanvas::{OffscreenCanvas, OffscreenCanvasContext};
@@ -147,10 +147,7 @@ pub(crate) struct CanvasState {
 }
 
 impl CanvasState {
-    pub(crate) async fn new(
-        global: &GlobalScope,
-        size: Size2D<u64>,
-    ) -> CanvasState {
+    pub(crate) async fn new(global: &GlobalScope, size: Size2D<u64>) -> CanvasState {
         debug!("Creating new canvas rendering context.");
         let (sender, receiver) =
             profiled_ipc::channel(global.time_profiler_chan().clone()).unwrap();

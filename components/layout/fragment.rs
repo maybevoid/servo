@@ -40,7 +40,7 @@ use servo_url::ServoUrl;
 use std::borrow::ToOwned;
 use std::cmp::{max, min, Ordering};
 use std::collections::LinkedList;
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::{f32, fmt};
 use style::computed_values::border_collapse::T as BorderCollapse;
 use style::computed_values::box_sizing::T as BoxSizing;
