@@ -63,7 +63,7 @@ fn webdriver(_port: u16, _constellation: Sender<ConstellationMsg>) {}
 
 use bluetooth::BluetoothThreadFactory;
 use bluetooth_traits::BluetoothRequest;
-use canvas::canvas_paint_thread::{self, CanvasPaintThread};
+use canvas::canvas_paint_thread;
 use canvas::WebGLComm;
 use canvas_traits::webgl::WebGLThreads;
 use compositing::compositor_thread::{

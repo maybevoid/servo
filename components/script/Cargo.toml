@@ -54,7 +54,7 @@ embedder_traits = { path = "../embedder_traits" }
 encoding_rs = "0.8"
 enum-iterator = "0.3"
 euclid = "0.20"
-ferrite-session = {  path = "/mnt/gamma/development/ferrite/ferrite-session" }
+ferrite-session = { git = "https://github.com/ferrite-rs/ferrite" }
 fnv = "1.0"
 fxhash = "0.2"
 headers = "0.2"
