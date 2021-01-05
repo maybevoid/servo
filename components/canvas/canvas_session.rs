@@ -331,5 +331,7 @@ pub async fn draw_image_in_other(
         })
     });
 
+    debug!("acquiring shared session");
     run_session(prog).await;
+    debug!("released shared session");
 }

@@ -298,14 +298,20 @@ impl HTMLCanvasElement {
 
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
-                let data = task::block_on(run_session_with_result(
-                    acquire_shared_session!(context.get_canvas_session(), chan =>
-                            choose!(chan, FromScript,
-                                receive_value_from!(chan, data =>
-                                    release_shared_session(chan,
-                                        send_value(data,
-                                            terminate()))))),
-                ));
+                let data = task::block_on(async move {
+                    debug!("acquiring shared session");
+                    let res = run_session_with_result(
+                        acquire_shared_session!(context.get_canvas_session(), chan =>
+                                choose!(chan, FromScript,
+                                    receive_value_from!(chan, data =>
+                                        release_shared_session(chan,
+                                            send_value(data,
+                                                terminate()))))),
+                    )
+                    .await;
+                    debug!("released shared session");
+                    res
+                });
 
                 Some(IpcSharedMemory::from_bytes(&data))
             },

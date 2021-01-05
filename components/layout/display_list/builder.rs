@@ -1910,13 +1910,18 @@ impl Fragment {
                     CanvasFragmentSource::Image(ref m_session) => match *m_session {
                         Some(ref session) => {
                             let m_image = task::block_on(async move {
-                                run_session_with_result(acquire_shared_session!(session, chan =>
+                                debug!("acquiring shared session");
+                                let res = run_session_with_result(
+                                    acquire_shared_session!(session, chan =>
                                         choose!(chan, FromLayout,
                                             receive_value_from!(chan, image =>
                                                 release_shared_session(chan,
                                                     send_value(image,
-                                                        terminate()))))))
-                                .await
+                                                        terminate()))))),
+                                )
+                                .await;
+                                debug!("released shared session");
+                                res
                             });
 
                             match m_image {

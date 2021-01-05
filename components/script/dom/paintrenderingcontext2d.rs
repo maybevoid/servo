@@ -56,25 +56,25 @@ impl PaintRenderingContext2D {
     }
 
     pub fn send_data(&self, sender: IpcSender<CanvasImageData>) {
-        let m_data = task::block_on(run_session_with_result(
-            acquire_shared_session!(self.context.get_canvas_session(), chan =>
-                    choose!(chan, FromLayout,
-                        receive_value_from!(chan, data =>
-                            release_shared_session(chan,
-                                send_value(data,
-                                    terminate()))))),
-        ));
+        let m_data = task::block_on(async move {
+            debug!("acquiring shared session");
+            let res = run_session_with_result(
+                acquire_shared_session!(self.context.get_canvas_session(), chan =>
+                        choose!(chan, FromLayout,
+                            receive_value_from!(chan, data =>
+                                release_shared_session(chan,
+                                    send_value(data,
+                                        terminate()))))),
+            )
+            .await;
+            debug!("released shared session");
+            res
+        });
 
         match m_data {
             Some(data) => sender.send(data).unwrap(),
             None => return,
         }
-
-        // let msg = CanvasMsg::FromLayout(
-        //     FromLayoutMsg::SendData(sender),
-        //     self.context.get_canvas_id(),
-        // );
-        // let _ = self.context.get_ipc_renderer().send(msg);
     }
 
     pub fn take_missing_image_urls(&self) -> Vec<ServoUrl> {

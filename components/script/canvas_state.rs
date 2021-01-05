@@ -189,6 +189,7 @@ impl CanvasState {
     }
 
     pub async fn send_canvas_message(&self, message: CanvasMessage) {
+        debug!("[send_canvas_message] acquiring shared session");
         run_session(acquire_shared_session! ( self.session, chan => {
             choose! ( chan, Message,
                 send_value_to! ( chan, message,
@@ -196,6 +197,7 @@ impl CanvasState {
                         terminate! () ) ) )
         }))
         .await;
+        debug!("[send_canvas_message] released shared session");
     }
 
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
@@ -341,7 +343,9 @@ impl CanvasState {
             )
         });
 
+        debug!("[get_rect] acquiring shared session");
         let mut pixels = run_session_with_result(prog).await;
+        debug!("[get_rect] released shared session");
 
         for chunk in pixels.chunks_mut(4) {
             let b = chunk[0];
@@ -1511,7 +1515,8 @@ impl CanvasState {
             CanvasFillRule::Evenodd => FillRule::Evenodd,
         };
 
-        run_session_with_result(acquire_shared_session! ( self.session, chan => {
+        debug!("[is_point_in_path] acquiring shared session");
+        let res = run_session_with_result(acquire_shared_session! ( self.session, chan => {
             choose! ( chan, IsPointInPath,
                 send_value_to! ( chan, (x, y, fill_rule),
                     receive_value_from! ( chan, result => {
@@ -1520,7 +1525,9 @@ impl CanvasState {
                                 terminate () ) )
                     }) ) )
         }))
-        .await
+        .await;
+        debug!("[is_point_in_path] released shared session");
+        res
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-scale
@@ -1585,6 +1592,7 @@ impl CanvasState {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
     pub async fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
+        debug!("[get_transform] acquiring shared session");
         let transform = run_session_with_result(acquire_shared_session! ( self.session, chan => {
             choose! ( chan, GetTransform,
                 receive_value_from! ( chan, transform => {
@@ -1594,6 +1602,7 @@ impl CanvasState {
                 } ))
         }))
         .await;
+        debug!("[get_transform] released shared session");
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())
     }
