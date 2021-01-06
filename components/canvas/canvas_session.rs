@@ -298,40 +298,35 @@ pub async fn draw_image_in_other(
     source_rect: Rect<f64>,
     smoothing: bool,
 ) {
-    let prog: Session<End> = acquire_shared_session(source, move |source_chan| async move {
-        acquire_shared_session(target, move |target_chan| async move {
+
+    debug!("[draw_image_in_other] acquiring shared session");
+
+    run_session(
+        acquire_shared_session!(source, source_chan =>
             choose!(
                 source_chan,
                 GetImageData,
                 send_value_to!(
                     source_chan,
                     (source_rect.to_u64(), image_size.to_u64()),
-                    receive_value_from(source_chan, move |image: Vec<u8>| async move {
-                        choose!(
-                            target_chan,
-                            Message,
-                            send_value_to!(
-                                target_chan,
-                                CanvasMessage::DrawImage(
-                                    Some(image),
-                                    source_rect.size,
-                                    dest_rect,
-                                    source_rect,
-                                    smoothing
-                                ),
-                                release_shared_session(
-                                    source_chan,
-                                    release_shared_session(target_chan, terminate())
-                                )
-                            )
-                        )
-                    })
-                )
-            )
-        })
-    });
+                    receive_value_from!(source_chan, image =>
+                        release_shared_session(
+                            source_chan,
+                            acquire_shared_session!(target, target_chan =>
+                                choose!(
+                                    target_chan,
+                                    Message,
+                                    send_value_to!(
+                                        target_chan,
+                                        CanvasMessage::DrawImage(
+                                            Some(image),
+                                            source_rect.size,
+                                            dest_rect,
+                                            source_rect,
+                                            smoothing
+                                        ),
+                                        release_shared_session(target_chan, terminate())
+                                    ))))))))).await;
 
-    debug!("acquiring shared session");
-    run_session(prog).await;
     debug!("released shared session");
 }
