@@ -2,7 +2,9 @@ use ferrite_session::*;
 
 use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
+use ipc_channel::ipc::IpcSharedMemory;
 use serde;
+use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
 
 use crate::canvas_data::*;
@@ -14,7 +16,7 @@ use gfx::font_cache_thread::FontCacheThread;
 pub enum CanvasMessage {
     Arc(Point2D<f32>, f32, f32, f32, bool),
     ArcTo(Point2D<f32>, Point2D<f32>, f32),
-    DrawImage(Option<Vec<u8>>, Size2D<f64>, Rect<f64>, Rect<f64>, bool),
+    DrawImage(Option<ByteBuf>, Size2D<f64>, Rect<f64>, Rect<f64>, bool),
     BeginPath,
     BezierCurveTo(Point2D<f32>, Point2D<f32>, Point2D<f32>),
     ClearRect(Rect<f32>),
@@ -46,7 +48,7 @@ pub enum CanvasMessage {
     SetFont(FontStyleStruct),
     SetTextAlign(TextAlign),
     SetTextBaseline(TextBaseline),
-    PutImageData(Rect<u64>, Vec<u8>),
+    PutImageData(Rect<u64>, IpcSharedMemory),
     Recreate(Size2D<u64>),
 }
 
@@ -62,7 +64,7 @@ define_choice! { CanvasOps;
   GetImageData: ReceiveValue <
     ( Rect<u64>, Size2D<u64> ),
     SendValue <
-      Vec < u8 >,
+      IpcSharedMemory,
       Z
     >
   >,
@@ -78,7 +80,7 @@ define_choice! { CanvasOps;
     Z
   >,
   FromScript: SendValue <
-    Vec<u8>,
+    IpcSharedMemory,
     Z
   >,
 }
@@ -126,7 +128,7 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
             ) => {
                 let data = imagedata.map_or_else(
                     || vec![0; image_size.width as usize * image_size.height as usize * 4],
-                    |bytes| bytes,
+                    |bytes| bytes.into_vec(),
                 );
                 canvas.draw_image(
                     data,
@@ -181,7 +183,7 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
                 canvas.set_text_baseline(text_baseline)
             },
             CanvasMessage::PutImageData(rect, img) => {
-                canvas.put_image_data(img, rect);
+                canvas.put_image_data(img.to_vec(), rect);
             },
             CanvasMessage::Recreate(size) => {
                 canvas.recreate(size);
@@ -203,11 +205,10 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
       GetImageData => {
         receive_value!( msg => {
           let (dest_rect, canvas_size) = msg;
-          let pixels = Vec::from(
-            canvas.read_pixels(dest_rect, canvas_size)
-          );
+          let data = IpcSharedMemory::from_bytes(
+            &canvas.read_pixels(dest_rect, canvas_size)[..]);
 
-          send_value!(pixels,
+          send_value!(data,
             detach_shared_session (
               canvas_session ( canvas )
             ))
@@ -233,7 +234,9 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
         )
       },
       FromScript => {
-        let data = canvas.get_pixels();
+        let data = IpcSharedMemory::from_bytes(
+          &canvas.get_pixels());
+
         send_value! ( data,
           detach_shared_session (
             canvas_session ( canvas )
@@ -298,35 +301,37 @@ pub async fn draw_image_in_other(
     source_rect: Rect<f64>,
     smoothing: bool,
 ) {
-
     debug!("[draw_image_in_other] acquiring shared session");
 
-    run_session(
-        acquire_shared_session!(source, source_chan =>
-            choose!(
-                source_chan,
-                GetImageData,
-                send_value_to!(
+    run_session(acquire_shared_session!(source, source_chan =>
+    choose!(
+        source_chan,
+        GetImageData,
+        send_value_to!(
+            source_chan,
+            (source_rect.to_u64(), image_size.to_u64()),
+            receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
+                release_shared_session(
                     source_chan,
-                    (source_rect.to_u64(), image_size.to_u64()),
-                    receive_value_from!(source_chan, image =>
-                        release_shared_session(
-                            source_chan,
-                            acquire_shared_session!(target, target_chan =>
-                                choose!(
-                                    target_chan,
-                                    Message,
-                                    send_value_to!(
-                                        target_chan,
-                                        CanvasMessage::DrawImage(
-                                            Some(image),
-                                            source_rect.size,
-                                            dest_rect,
-                                            source_rect,
-                                            smoothing
-                                        ),
-                                        release_shared_session(target_chan, terminate())
-                                    ))))))))).await;
+                    acquire_shared_session!(target, target_chan =>
+                        choose!(
+                            target_chan,
+                            Message,
+                            send_value_to!(
+                                target_chan,
+                                CanvasMessage::DrawImage(
+                                    Some(ByteBuf::from(image.to_vec())),
+                                    source_rect.size,
+                                    dest_rect,
+                                    source_rect,
+                                    smoothing
+                                ),
+                                release_shared_session(target_chan, terminate())
+                            ))))
+            }))
+                        )
+                        ))
+    .await;
 
     debug!("released shared session");
 }

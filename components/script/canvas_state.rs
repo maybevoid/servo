@@ -40,11 +40,13 @@ use euclid::{
     default::{Point2D, Rect, Size2D, Transform2D},
     vec2,
 };
+use ipc_channel::ipc::IpcSharedMemory;
 use net_traits::image_cache::{ImageCache, ImageResponse};
 use net_traits::request::CorsSettings;
 use pixels::PixelFormat;
 use profile_traits::ipc as profiled_ipc;
 use script_traits::ScriptMsg;
+use serde_bytes::ByteBuf;
 use servo_url::{ImmutableOrigin, ServoUrl};
 use std::cell::Cell;
 use std::fmt;
@@ -332,29 +334,33 @@ impl CanvasState {
 
         assert!(Rect::from_size(canvas_size).contains_rect(&rect));
 
-        let prog: Session<SendValue<Vec<u8>, End>> = acquire_shared_session! ( self.session, chan => {
-            choose! ( chan, GetImageData,
-                send_value_to! ( chan, (rect, canvas_size),
-                    receive_value_from! ( chan, image => {
-                        release_shared_session ( chan,
-                            send_value! ( image,
-                                terminate! () ) )
-                    }))
-            )
-        });
-
         debug!("[get_rect] acquiring shared session");
-        let mut pixels = run_session_with_result(prog).await;
+
+        let mem: IpcSharedMemory =
+            run_session_with_result(acquire_shared_session! ( self.session, chan => {
+            choose! ( chan, GetImageData,
+                    send_value_to! ( chan, (rect, canvas_size),
+                        receive_value_from! ( chan, image => {
+                            release_shared_session ( chan,
+                                send_value! ( image,
+                                    terminate! () ) )
+                        }))
+                )
+            }))
+            .await;
+
         debug!("[get_rect] released shared session");
 
-        for chunk in pixels.chunks_mut(4) {
+        let mut data = mem.to_vec();
+
+        for chunk in data.chunks_mut(4) {
             let b = chunk[0];
             chunk[0] = UNPREMULTIPLY_TABLE[256 * (chunk[3] as usize) + chunk[2] as usize];
             chunk[1] = UNPREMULTIPLY_TABLE[256 * (chunk[3] as usize) + chunk[1] as usize];
             chunk[2] = UNPREMULTIPLY_TABLE[256 * (chunk[3] as usize) + b as usize];
         }
 
-        pixels
+        data
     }
 
     //
@@ -610,7 +616,7 @@ impl CanvasState {
 
         let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
         self.send_canvas_message(CanvasMessage::DrawImage(
-            Some(image_data),
+            Some(ByteBuf::from(image_data)),
             image_size,
             dest_rect,
             source_rect,
@@ -1381,8 +1387,9 @@ impl CanvasState {
         };
 
         // Step 7.
-        let pixels: Vec<u8> =
-            Vec::from(unsafe { imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size)) });
+        let pixels: IpcSharedMemory = IpcSharedMemory::from_bytes(unsafe {
+            &imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size))
+        });
 
         self.send_canvas_message(CanvasMessage::PutImageData(dst_rect, pixels))
             .await
