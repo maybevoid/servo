@@ -31,6 +31,7 @@ use crate::fragment::{CanvasFragmentSource, CoordinateSystem, Fragment, ScannedT
 use crate::inline::InlineFragmentNodeFlags;
 use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
+use canvas::canvas_session;
 use app_units::{Au, AU_PER_PX};
 use async_std::task;
 use canvas::canvas_session::*;
@@ -1909,17 +1910,20 @@ impl Fragment {
                     CanvasFragmentSource::WebGPU(image_key) => image_key,
                     CanvasFragmentSource::Image(ref m_session) => match *m_session {
                         Some(ref session) => {
+                            let session = session.clone();
                             let m_image = task::block_on(async move {
                                 debug!("acquiring shared session");
-                                let res = run_session_with_result(
-                                    acquire_shared_session!(session, chan =>
-                                        choose!(chan, FromLayout,
-                                            receive_value_from!(chan, image =>
-                                                release_shared_session(chan,
-                                                    send_value(image,
-                                                        terminate()))))),
-                                )
-                                .await;
+                                let res = canvas_session::enqueue_task(move || async move {
+                                    run_session_with_result(
+                                        acquire_shared_session!(session, chan =>
+                                            choose!(chan, FromLayout,
+                                                receive_value_from!(chan, image =>
+                                                    release_shared_session(chan,
+                                                        send_value(image,
+                                                            terminate()))))),
+                                    )
+                                    .await
+                                }).await.await;
                                 debug!("released shared session");
                                 res
                             });

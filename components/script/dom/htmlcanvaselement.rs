@@ -29,6 +29,7 @@ use crate::dom::virtualmethods::VirtualMethods;
 use crate::dom::webgl2renderingcontext::WebGL2RenderingContext;
 use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
+use canvas::canvas_session;
 use async_std::task;
 use base64;
 use canvas::canvas_session::*;
@@ -298,17 +299,20 @@ impl HTMLCanvasElement {
 
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
+                let session = context.get_canvas_session().clone();
                 let data = task::block_on(async move {
                     debug!("acquiring shared session");
-                    let res = run_session_with_result(
-                        acquire_shared_session!(context.get_canvas_session(), chan =>
-                                choose!(chan, FromScript,
-                                    receive_value_from!(chan, data =>
-                                        release_shared_session(chan,
-                                            send_value(data,
-                                                terminate()))))),
-                    )
-                    .await;
+                    let res = canvas_session::enqueue_task(move || async move {
+                        run_session_with_result(
+                            acquire_shared_session!(session, chan =>
+                                    choose!(chan, FromScript,
+                                        receive_value_from!(chan, data =>
+                                            release_shared_session(chan,
+                                                send_value(data,
+                                                    terminate()))))),
+                        )
+                        .await
+                    }).await.await;
                     debug!("released shared session");
                     res
                 });

@@ -16,6 +16,7 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::offscreencanvasrenderingcontext2d::OffscreenCanvasRenderingContext2D;
 use crate::script_runtime::JSContext;
+use canvas::canvas_session;
 use async_std::task;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
@@ -105,17 +106,20 @@ impl OffscreenCanvas {
 
         let data = match self.context.borrow().as_ref() {
             Some(&OffscreenCanvasContext::OffscreenContext2d(ref context)) => {
+                let session = context.get_canvas_session().clone();
                 let data = task::block_on(async move {
                     debug!("acquiring shared session");
-                    let res = run_session_with_result(
-                        acquire_shared_session!(context.get_canvas_session(), chan =>
-                                choose!(chan, FromScript,
-                                    receive_value_from!(chan, data =>
-                                        release_shared_session(chan,
-                                            send_value(data,
-                                                terminate()))))),
-                    )
-                    .await;
+                    let res = canvas_session::enqueue_task(move || async move {
+                        run_session_with_result(
+                            acquire_shared_session!(session, chan =>
+                                    choose!(chan, FromScript,
+                                        receive_value_from!(chan, data =>
+                                            release_shared_session(chan,
+                                                send_value(data,
+                                                    terminate()))))),
+                        )
+                        .await
+                    }).await.await;
                     debug!("released shared session");
                     res
                 });

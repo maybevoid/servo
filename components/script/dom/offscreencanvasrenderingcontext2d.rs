@@ -73,7 +73,7 @@ impl OffscreenCanvasRenderingContext2D {
     }
 
     pub fn set_canvas_bitmap_dimensions(&self, size: Size2D<u64>) {
-        task::block_on(self.canvas_state.set_bitmap_dimensions(size));
+        self.canvas_state.set_bitmap_dimensions(size);
     }
 
     pub fn origin_is_clean(&self) -> bool {
@@ -89,17 +89,17 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-fillrect
     fn FillRect(&self, x: f64, y: f64, width: f64, height: f64) {
-        task::block_on(self.canvas_state.fill_rect(x, y, width, height));
+        self.canvas_state.fill_rect(x, y, width, height);
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-clearrect
     fn ClearRect(&self, x: f64, y: f64, width: f64, height: f64) {
-        task::block_on(self.canvas_state.clear_rect(x, y, width, height));
+        self.canvas_state.clear_rect(x, y, width, height);
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-strokerect
     fn StrokeRect(&self, x: f64, y: f64, width: f64, height: f64) {
-        task::block_on(self.canvas_state.stroke_rect(x, y, width, height));
+        self.canvas_state.stroke_rect(x, y, width, height);
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsetx
@@ -109,7 +109,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsetx
     fn SetShadowOffsetX(&self, value: f64) {
-        task::block_on(self.canvas_state.set_shadow_offset_x(value))
+        self.canvas_state.set_shadow_offset_x(value)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsety
@@ -119,7 +119,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowoffsety
     fn SetShadowOffsetY(&self, value: f64) {
-        task::block_on(self.canvas_state.set_shadow_offset_y(value))
+        self.canvas_state.set_shadow_offset_y(value)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowblur
@@ -129,7 +129,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowblur
     fn SetShadowBlur(&self, value: f64) {
-        task::block_on(self.canvas_state.set_shadow_blur(value))
+        self.canvas_state.set_shadow_blur(value)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowcolor
@@ -139,7 +139,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-shadowcolor
     fn SetShadowColor(&self, value: DOMString) {
-        task::block_on(self.canvas_state.set_shadow_color(value))
+        self.canvas_state.set_shadow_color(value)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-strokestyle
@@ -202,13 +202,13 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-save
     fn Save(&self) {
-        task::block_on(self.canvas_state.save())
+        self.canvas_state.save()
     }
 
     #[allow(unrooted_must_root)]
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-restore
     fn Restore(&self) {
-        task::block_on(self.canvas_state.restore())
+        self.canvas_state.restore()
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalalpha
@@ -218,7 +218,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalalpha
     fn SetGlobalAlpha(&self, alpha: f64) {
-        task::block_on(self.canvas_state.set_global_alpha(alpha))
+        self.canvas_state.set_global_alpha(alpha)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalcompositeoperation
@@ -228,7 +228,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-globalcompositeoperation
     fn SetGlobalCompositeOperation(&self, op_str: DOMString) {
-        task::block_on(self.canvas_state.set_global_composite_operation(op_str))
+        self.canvas_state.set_global_composite_operation(op_str)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-imagesmoothingenabled
@@ -243,13 +243,13 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-filltext
     fn FillText(&self, text: DOMString, x: f64, y: f64, max_width: Option<f64>) {
-        task::block_on(self.canvas_state.fill_text(
+        self.canvas_state.fill_text(
             self.htmlcanvas.as_ref().map(|c| &**c),
             text,
             x,
             y,
             max_width,
-        ))
+        )
     }
 
     // https://html.spec.whatwg.org/multipage/#textmetrics
@@ -264,10 +264,8 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-font
     fn SetFont(&self, value: DOMString) {
-        task::block_on(
-            self.canvas_state
-                .set_font(self.htmlcanvas.as_ref().map(|c| &**c), value),
-        )
+        self.canvas_state
+            .set_font(self.htmlcanvas.as_ref().map(|c| &**c), value)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textalign
@@ -277,7 +275,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textalign
     fn SetTextAlign(&self, value: CanvasTextAlign) {
-        task::block_on(self.canvas_state.set_text_align(value))
+        self.canvas_state.set_text_align(value)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textbaseline
@@ -287,7 +285,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-textbaseline
     fn SetTextBaseline(&self, value: CanvasTextBaseline) {
-        task::block_on(self.canvas_state.set_text_baseline(value))
+        self.canvas_state.set_text_baseline(value)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-direction
@@ -307,7 +305,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linewidth
     fn SetLineWidth(&self, width: f64) {
-        task::block_on(self.canvas_state.set_line_width(width))
+        self.canvas_state.set_line_width(width)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linecap
@@ -317,7 +315,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linecap
     fn SetLineCap(&self, cap: CanvasLineCap) {
-        task::block_on(self.canvas_state.set_line_cap(cap))
+        self.canvas_state.set_line_cap(cap)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linejoin
@@ -327,7 +325,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-linejoin
     fn SetLineJoin(&self, join: CanvasLineJoin) {
-        task::block_on(self.canvas_state.set_line_join(join))
+        self.canvas_state.set_line_join(join)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-miterlimit
@@ -337,7 +335,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-miterlimit
     fn SetMiterLimit(&self, limit: f64) {
-        task::block_on(self.canvas_state.set_miter_limit(limit))
+        self.canvas_state.set_miter_limit(limit)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-createimagedata
@@ -365,10 +363,8 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata
     fn PutImageData(&self, imagedata: &ImageData, dx: i32, dy: i32) {
-        task::block_on(
-            self.canvas_state
-                .put_image_data(self.canvas.get_size(), imagedata, dx, dy),
-        )
+        self.canvas_state
+            .put_image_data(self.canvas.get_size(), imagedata, dx, dy)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata
@@ -383,7 +379,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
         dirty_width: i32,
         dirty_height: i32,
     ) {
-        task::block_on(self.canvas_state.put_image_data_(
+        self.canvas_state.put_image_data_(
             self.canvas.get_size(),
             imagedata,
             dx,
@@ -392,17 +388,17 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
             dirty_y,
             dirty_width,
             dirty_height,
-        ))
+        )
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
     fn DrawImage(&self, image: CanvasImageSource, dx: f64, dy: f64) -> ErrorResult {
-        task::block_on(self.canvas_state.draw_image(
+        self.canvas_state.draw_image(
             self.htmlcanvas.as_ref().map(|c| &**c),
             image,
             dx,
             dy,
-        ))
+        )
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
@@ -414,14 +410,14 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
         dw: f64,
         dh: f64,
     ) -> ErrorResult {
-        task::block_on(self.canvas_state.draw_image_(
+        self.canvas_state.draw_image_(
             self.htmlcanvas.as_ref().map(|c| &**c),
             image,
             dx,
             dy,
             dw,
             dh,
-        ))
+        )
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
@@ -437,7 +433,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
         dw: f64,
         dh: f64,
     ) -> ErrorResult {
-        task::block_on(self.canvas_state.draw_image__(
+        self.canvas_state.draw_image__(
             self.htmlcanvas.as_ref().map(|c| &**c),
             image,
             sx,
@@ -448,27 +444,27 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
             dy,
             dw,
             dh,
-        ))
+        )
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-beginpath
     fn BeginPath(&self) {
-        task::block_on(self.canvas_state.begin_path())
+        self.canvas_state.begin_path()
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-fill
     fn Fill(&self, fill_rule: CanvasFillRule) {
-        task::block_on(self.canvas_state.fill(fill_rule))
+        self.canvas_state.fill(fill_rule)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-stroke
     fn Stroke(&self) {
-        task::block_on(self.canvas_state.stroke())
+        self.canvas_state.stroke()
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-clip
     fn Clip(&self, fill_rule: CanvasFillRule) {
-        task::block_on(self.canvas_state.clip(fill_rule))
+        self.canvas_state.clip(fill_rule)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ispointinpath
@@ -481,22 +477,22 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-scale
     fn Scale(&self, x: f64, y: f64) {
-        task::block_on(self.canvas_state.scale(x, y))
+        self.canvas_state.scale(x, y)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-rotate
     fn Rotate(&self, angle: f64) {
-        task::block_on(self.canvas_state.rotate(angle))
+        self.canvas_state.rotate(angle)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-translate
     fn Translate(&self, x: f64, y: f64) {
-        task::block_on(self.canvas_state.translate(x, y))
+        self.canvas_state.translate(x, y)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-transform
     fn Transform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
-        task::block_on(self.canvas_state.transform(a, b, c, d, e, f))
+        self.canvas_state.transform(a, b, c, d, e, f)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
@@ -506,55 +502,53 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-settransform
     fn SetTransform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) {
-        task::block_on(self.canvas_state.set_transform(a, b, c, d, e, f))
+        self.canvas_state.set_transform(a, b, c, d, e, f)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-resettransform
     fn ResetTransform(&self) {
-        task::block_on(self.canvas_state.reset_transform())
+        self.canvas_state.reset_transform()
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-closepath
     fn ClosePath(&self) {
-        task::block_on(self.canvas_state.close_path())
+        self.canvas_state.close_path()
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-moveto
     fn MoveTo(&self, x: f64, y: f64) {
-        task::block_on(self.canvas_state.move_to(x, y))
+        self.canvas_state.move_to(x, y)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-lineto
     fn LineTo(&self, x: f64, y: f64) {
-        task::block_on(self.canvas_state.line_to(x, y))
+        self.canvas_state.line_to(x, y)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-rect
     fn Rect(&self, x: f64, y: f64, width: f64, height: f64) {
-        task::block_on(self.canvas_state.rect(x, y, width, height))
+        self.canvas_state.rect(x, y, width, height)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-quadraticcurveto
     fn QuadraticCurveTo(&self, cpx: f64, cpy: f64, x: f64, y: f64) {
-        task::block_on(self.canvas_state.quadratic_curve_to(cpx, cpy, x, y))
+        self.canvas_state.quadratic_curve_to(cpx, cpy, x, y)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-beziercurveto
     fn BezierCurveTo(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
-        task::block_on(
-            self.canvas_state
-                .bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y),
-        )
+        self.canvas_state
+            .bezier_curve_to(cp1x, cp1y, cp2x, cp2y, x, y)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-arc
     fn Arc(&self, x: f64, y: f64, r: f64, start: f64, end: f64, ccw: bool) -> ErrorResult {
-        task::block_on(self.canvas_state.arc(x, y, r, start, end, ccw))
+        self.canvas_state.arc(x, y, r, start, end, ccw)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-arcto
     fn ArcTo(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, r: f64) -> ErrorResult {
-        task::block_on(self.canvas_state.arc_to(cp1x, cp1y, cp2x, cp2y, r))
+        self.canvas_state.arc_to(cp1x, cp1y, cp2x, cp2y, r)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ellipse
@@ -569,9 +563,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
         end: f64,
         ccw: bool,
     ) -> ErrorResult {
-        task::block_on(
-            self.canvas_state
-                .ellipse(x, y, rx, ry, rotation, start, end, ccw),
-        )
+        self.canvas_state
+            .ellipse(x, y, rx, ry, rotation, start, end, ccw)
     }
 }

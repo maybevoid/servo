@@ -6,7 +6,10 @@ use ipc_channel::ipc::IpcSharedMemory;
 use serde;
 use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
-
+use std::pin::Pin;
+use std::future::{Future};
+use async_std::{task, channel};
+use lazy_static::lazy_static;
 use crate::canvas_data::*;
 use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
 use canvas_traits::canvas::*;
@@ -334,4 +337,69 @@ pub async fn draw_image_in_other(
     .await;
 
     debug!("released shared session");
+}
+
+lazy_static! {
+    static ref TASK_QUEUE : AsyncQueue = AsyncQueue::new();
+}
+
+struct AsyncQueue {
+    task_sender: channel::Sender <
+        Pin < Box <
+            dyn Future< Output=() > + Send + 'static
+        > >
+    >
+}
+
+impl AsyncQueue {
+    fn new() -> AsyncQueue {
+        let (sender, receiver) = channel::unbounded();
+        task::spawn(async move {
+            loop {
+                match receiver.recv().await {
+                    Ok(task) => {
+                        task.await;
+                    }
+                    Err(_) => break
+                }
+            }
+        });
+
+        AsyncQueue {
+            task_sender: sender
+        }
+    }
+
+    async fn enqueue_task <T, Fut> (
+        &self,
+        task: impl FnOnce() -> Fut
+             + Send + 'static
+    ) -> impl Future < Output=T > + Send + 'static
+    where
+        T: Send + 'static,
+        Fut: Future< Output=T > + Send + 'static
+    {
+        let (sender, receiver) = once_channel();
+        let job = Box::pin(async move {
+            let res = task().await;
+            sender.send(res).await.unwrap();
+        });
+        self.task_sender.send(job).await.unwrap();
+
+        async move {
+            receiver.recv().await.unwrap()
+        }
+    }
+}
+
+
+pub async fn enqueue_task <T, Fut> (
+    task: impl FnOnce() -> Fut
+            + Send + 'static
+) -> impl Future < Output=T > + Send + 'static
+where
+    T: Send + 'static,
+    Fut: Future< Output=T > + Send + 'static
+{
+    TASK_QUEUE.enqueue_task(task).await
 }
