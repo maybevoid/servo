@@ -1820,10 +1820,11 @@ where
                     warn!("Error replying to remove iframe ({})", e);
                 }
             },
-            FromScriptMsg::CreateCanvasPaintThread(size, sender) => canvas_session::RUNTIME.block_on(async move {
-                self.handle_create_canvas_paint_thread_msg(size, sender)
-                    .await
-            }),
+            FromScriptMsg::CreateCanvasPaintThread(size, sender) =>
+                canvas_session::RUNTIME.block_on(async move {
+                    self.handle_create_canvas_paint_thread_msg(size, sender)
+                        .await
+                }),
             FromScriptMsg::SetDocumentState(state) => {
                 self.document_states.insert(source_pipeline_id, state);
             },

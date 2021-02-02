@@ -12,8 +12,12 @@ exclude = [".cargo"]
 [profile.release]
 opt-level = 3
 # Uncomment to profile on Linux:
-# debug = true
-# lto = false
+debug = true
+lto = false
+
+[profile.release.package."*"]
+opt-level = 3
+debug = true
 
 [patch.crates-io]
 # If you need to temporarily test Servo with a local fork of some upstream

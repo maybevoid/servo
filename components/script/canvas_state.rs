@@ -150,7 +150,7 @@ pub(crate) struct CanvasState {
 }
 
 impl CanvasState {
-    pub(crate) async fn new(global: &GlobalScope, size: Size2D<u64>) -> CanvasState {
+    pub(crate) fn new(global: &GlobalScope, size: Size2D<u64>) -> CanvasState {
         debug!("Creating new canvas rendering context.");
         let (sender, receiver) =
             profiled_ipc::channel(global.time_profiler_chan().clone()).unwrap();
@@ -355,7 +355,7 @@ impl CanvasState {
         }
     }
 
-    pub async fn get_rect(&self, canvas_size: Size2D<u64>, rect: Rect<u64>) -> Vec<u8> {
+    pub fn get_rect(&self, canvas_size: Size2D<u64>, rect: Rect<u64>) -> Vec<u8> {
         assert!(self.origin_is_clean());
 
         assert!(Rect::from_size(canvas_size).contains_rect(&rect));
@@ -363,7 +363,7 @@ impl CanvasState {
         debug!("[get_rect] acquiring shared session");
 
         let session = self.session.clone();
-        let mem: IpcSharedMemory =
+        let mem: IpcSharedMemory = canvas_session::RUNTIME.block_on(async move {
             enqueue_task(move || async move {
                 run_session_with_result(
                     acquire_shared_session! ( session, chan => {
@@ -377,7 +377,8 @@ impl CanvasState {
                             )
                         }))
                         .await
-            }).await.await;
+            }).await.await
+        });
 
         debug!("[get_rect] released shared session");
 
@@ -1288,7 +1289,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-getimagedata
-    pub async fn get_image_data(
+    pub fn get_image_data(
         &self,
         canvas_size: Size2D<u64>,
         global: &GlobalScope,
@@ -1321,7 +1322,7 @@ impl CanvasState {
             global,
             size.width,
             size.height,
-            Some(self.get_rect(canvas_size, read_rect).await),
+            Some(self.get_rect(canvas_size, read_rect)),
         )
     }
 
@@ -1508,7 +1509,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ispointinpath
-    pub async fn is_point_in_path(
+    pub fn is_point_in_path(
         &self,
         _global: &GlobalScope,
         x: f64,
@@ -1526,18 +1527,20 @@ impl CanvasState {
 
         debug!("[is_point_in_path] acquiring shared session");
         let session = self.session.clone();
-        let res = enqueue_task(move || async move {
-            run_session_with_result(acquire_shared_session! ( session, chan => {
-                choose! ( chan, IsPointInPath,
-                    send_value_to! ( chan, (x, y, fill_rule),
-                        receive_value_from! ( chan, result => {
-                            release_shared_session ( chan,
-                                send_value! ( result,
-                                    terminate () ) )
-                        }) ) )
-            }))
-            .await
-        }).await.await;
+        let res = canvas_session::RUNTIME.block_on(async move {
+            enqueue_task(move || async move {
+                run_session_with_result(acquire_shared_session! ( session, chan => {
+                    choose! ( chan, IsPointInPath,
+                        send_value_to! ( chan, (x, y, fill_rule),
+                            receive_value_from! ( chan, result => {
+                                release_shared_session ( chan,
+                                    send_value! ( result,
+                                        terminate () ) )
+                            }) ) )
+                }))
+                .await
+            }).await.await
+        });
 
         debug!("[is_point_in_path] released shared session");
         res
@@ -1604,20 +1607,22 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
-    pub async fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
+    pub fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
         debug!("[get_transform] acquiring shared session");
         let session = self.session.clone();
-        let transform = enqueue_task(move || async move {
-            run_session_with_result(acquire_shared_session! ( session, chan => {
-                choose! ( chan, GetTransform,
-                    receive_value_from! ( chan, transform => {
-                        release_shared_session ( chan,
-                            send_value! ( transform,
-                                terminate () ))
-                    } ))
-            }))
-            .await
-        }).await.await;
+        let transform = canvas_session::RUNTIME.block_on(async move {
+            enqueue_task(move || async move {
+                run_session_with_result(acquire_shared_session! ( session, chan => {
+                    choose! ( chan, GetTransform,
+                        receive_value_from! ( chan, transform => {
+                            release_shared_session ( chan,
+                                send_value! ( transform,
+                                    terminate () ))
+                        } ))
+                }))
+                .await
+            }).await.await
+        });
         debug!("[get_transform] released shared session");
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())

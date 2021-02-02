@@ -341,7 +341,12 @@ pub async fn draw_image_in_other(
 
 lazy_static! {
   static ref TASK_QUEUE : AsyncQueue = AsyncQueue::new();
-  pub static ref RUNTIME : runtime::Runtime = runtime::Runtime::new().unwrap();
+  pub static ref RUNTIME : runtime::Runtime =
+    runtime::Builder::new_multi_thread()
+      .worker_threads(16)
+      .max_blocking_threads(1024)
+      .build()
+      .unwrap();
 }
 
 struct AsyncQueue {
