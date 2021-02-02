@@ -45,7 +45,8 @@ pub mod platform {
     pub fn deinit(_clean_shutdown: bool) {}
 }
 
-pub fn main() {
+#[tokio::main]
+pub async fn main() {
     crash_handler::install();
 
     resources::init();

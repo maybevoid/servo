@@ -8,7 +8,7 @@ use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
 use std::pin::Pin;
 use std::future::{Future};
-use async_std::{task, channel};
+use tokio::{task, runtime, sync::mpsc};
 use lazy_static::lazy_static;
 use crate::canvas_data::*;
 use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
@@ -340,27 +340,28 @@ pub async fn draw_image_in_other(
 }
 
 lazy_static! {
-    static ref TASK_QUEUE : AsyncQueue = AsyncQueue::new();
+  static ref TASK_QUEUE : AsyncQueue = AsyncQueue::new();
+  pub static ref RUNTIME : runtime::Runtime = runtime::Runtime::new().unwrap();
 }
 
 struct AsyncQueue {
-    task_sender: channel::Sender <
-        Pin < Box <
-            dyn Future< Output=() > + Send + 'static
-        > >
-    >
+  task_sender: mpsc::UnboundedSender <
+      Pin < Box <
+          dyn Future< Output=() > + Send + 'static
+      > >
+  >
 }
 
 impl AsyncQueue {
     fn new() -> AsyncQueue {
-        let (sender, receiver) = channel::unbounded();
+        let (sender, mut receiver) = mpsc::unbounded_channel();
         task::spawn(async move {
             loop {
                 match receiver.recv().await {
-                    Ok(task) => {
+                    Some(task) => {
                         task.await;
                     }
-                    Err(_) => break
+                    None => break
                 }
             }
         });
@@ -384,7 +385,7 @@ impl AsyncQueue {
             let res = task().await;
             sender.send(res).await.unwrap();
         });
-        self.task_sender.send(job).await.unwrap();
+        self.task_sender.send(job).ok().unwrap();
 
         async move {
             receiver.recv().await.unwrap()

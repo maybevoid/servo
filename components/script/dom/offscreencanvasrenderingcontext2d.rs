@@ -26,7 +26,7 @@ use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::offscreencanvas::OffscreenCanvas;
 use crate::dom::textmetrics::TextMetrics;
-use async_std::task;
+use canvas::canvas_session;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
@@ -47,7 +47,7 @@ impl OffscreenCanvasRenderingContext2D {
         canvas: &OffscreenCanvas,
         htmlcanvas: Option<&HTMLCanvasElement>,
     ) -> OffscreenCanvasRenderingContext2D {
-        let canvas_state = task::block_on(CanvasState::new(global, canvas.get_size()));
+        let canvas_state = canvas_session::RUNTIME.block_on(CanvasState::new(global, canvas.get_size()));
 
         OffscreenCanvasRenderingContext2D {
             reflector_: Reflector::new(),
@@ -351,7 +351,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-getimagedata
     fn GetImageData(&self, sx: i32, sy: i32, sw: i32, sh: i32) -> Fallible<DomRoot<ImageData>> {
-        task::block_on(self.canvas_state.get_image_data(
+        canvas_session::RUNTIME.block_on(self.canvas_state.get_image_data(
             self.canvas.get_size(),
             &self.global(),
             sx,
@@ -469,7 +469,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ispointinpath
     fn IsPointInPath(&self, x: f64, y: f64, fill_rule: CanvasFillRule) -> bool {
-        task::block_on(
+        canvas_session::RUNTIME.block_on(
             self.canvas_state
                 .is_point_in_path(&self.global(), x, y, fill_rule),
         )
@@ -497,7 +497,7 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
     fn GetTransform(&self) -> DomRoot<DOMMatrix> {
-        task::block_on(self.canvas_state.get_transform(&self.global()))
+        canvas_session::RUNTIME.block_on(self.canvas_state.get_transform(&self.global()))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-settransform

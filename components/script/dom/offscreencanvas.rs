@@ -17,7 +17,6 @@ use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::offscreencanvasrenderingcontext2d::OffscreenCanvasRenderingContext2D;
 use crate::script_runtime::JSContext;
 use canvas::canvas_session;
-use async_std::task;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
@@ -107,7 +106,7 @@ impl OffscreenCanvas {
         let data = match self.context.borrow().as_ref() {
             Some(&OffscreenCanvasContext::OffscreenContext2d(ref context)) => {
                 let session = context.get_canvas_session().clone();
-                let data = task::block_on(async move {
+                let data = canvas_session::RUNTIME.block_on(async move {
                     debug!("acquiring shared session");
                     let res = canvas_session::enqueue_task(move || async move {
                         run_session_with_result(
@@ -124,7 +123,7 @@ impl OffscreenCanvas {
                     res
                 });
 
-                Some(IpcSharedMemory::from_bytes(&data))
+                Some(data)
             },
             None => None,
         };

@@ -24,7 +24,7 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::textmetrics::TextMetrics;
-use async_std::task;
+use canvas::canvas_session;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::{Point2D, Rect, Size2D};
@@ -51,7 +51,7 @@ impl CanvasRenderingContext2D {
         CanvasRenderingContext2D {
             reflector_: Reflector::new(),
             canvas: canvas.map(Dom::from_ref),
-            canvas_state: task::block_on(CanvasState::new(
+            canvas_state: canvas_session::RUNTIME.block_on(CanvasState::new(
                 global,
                 Size2D::new(size.width as u64, size.height as u64),
             )),
@@ -111,7 +111,7 @@ impl CanvasRenderingContext2D {
             Point2D::new(rect.origin.x as u64, rect.origin.y as u64),
             Size2D::new(rect.size.width as u64, rect.size.height as u64),
         );
-        task::block_on(
+        canvas_session::RUNTIME.block_on(
             self.canvas_state.get_rect(
                 self.canvas
                     .as_ref()
@@ -179,7 +179,7 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
     fn GetTransform(&self) -> DomRoot<DOMMatrix> {
-        task::block_on(self.canvas_state.get_transform(&self.global()))
+        canvas_session::RUNTIME.block_on(self.canvas_state.get_transform(&self.global()))
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-settransform
@@ -259,7 +259,7 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-ispointinpath
     fn IsPointInPath(&self, x: f64, y: f64, fill_rule: CanvasFillRule) -> bool {
-        task::block_on(
+        canvas_session::RUNTIME.block_on(
             self.canvas_state
                 .is_point_in_path(&self.global(), x, y, fill_rule),
         )
@@ -476,7 +476,7 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-getimagedata
     fn GetImageData(&self, sx: i32, sy: i32, sw: i32, sh: i32) -> Fallible<DomRoot<ImageData>> {
-        task::block_on(
+        canvas_session::RUNTIME.block_on(
             self.canvas_state.get_image_data(
                 self.canvas
                     .as_ref()

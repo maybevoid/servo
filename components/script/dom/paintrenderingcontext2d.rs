@@ -22,7 +22,6 @@ use crate::dom::canvasrenderingcontext2d::CanvasRenderingContext2D;
 use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use canvas::canvas_session;
-use async_std::task;
 use canvas::canvas_session::*;
 use canvas_traits::canvas::CanvasImageData;
 use dom_struct::dom_struct;
@@ -58,7 +57,7 @@ impl PaintRenderingContext2D {
 
     pub fn send_data(&self, sender: IpcSender<CanvasImageData>) {
         let session = self.context.get_canvas_session().clone();
-        let m_data = task::block_on(async move {
+        let m_data = canvas_session::RUNTIME.block_on(async move {
             debug!("acquiring shared session");
             let res = canvas_session::enqueue_task(move || async move {
                 run_session_with_result(

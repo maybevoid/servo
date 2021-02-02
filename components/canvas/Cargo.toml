@@ -16,7 +16,7 @@ webgl_backtrace = ["canvas_traits/webgl_backtrace"]
 xr-profile = ["webxr-api/profile", "time"]
 
 [dependencies]
-async-std = "1.8.0"
+tokio = { version = "1.1.1", features = [ "full" ] }
 bitflags = "1.0"
 byteorder = "1"
 canvas_traits = { path = "../canvas_traits" }

@@ -33,7 +33,6 @@ use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
 use canvas::canvas_session;
 use app_units::{Au, AU_PER_PX};
-use async_std::task;
 use canvas::canvas_session::*;
 use embedder_traits::Cursor;
 use euclid::{
@@ -1911,7 +1910,7 @@ impl Fragment {
                     CanvasFragmentSource::Image(ref m_session) => match *m_session {
                         Some(ref session) => {
                             let session = session.clone();
-                            let m_image = task::block_on(async move {
+                            let m_image = canvas_session::RUNTIME.block_on(async move {
                                 debug!("acquiring shared session");
                                 let res = canvas_session::enqueue_task(move || async move {
                                     run_session_with_result(

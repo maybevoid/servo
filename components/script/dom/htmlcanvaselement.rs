@@ -30,7 +30,6 @@ use crate::dom::webgl2renderingcontext::WebGL2RenderingContext;
 use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
 use canvas::canvas_session;
-use async_std::task;
 use base64;
 use canvas::canvas_session::*;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
@@ -300,7 +299,7 @@ impl HTMLCanvasElement {
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
                 let session = context.get_canvas_session().clone();
-                let data = task::block_on(async move {
+                let data = canvas_session::RUNTIME.block_on(async move {
                     debug!("acquiring shared session");
                     let res = canvas_session::enqueue_task(move || async move {
                         run_session_with_result(
@@ -317,7 +316,7 @@ impl HTMLCanvasElement {
                     res
                 });
 
-                Some(IpcSharedMemory::from_bytes(&data))
+                Some(data)
             },
             Some(&CanvasContext::WebGL(_)) => {
                 // TODO: add a method in WebGLRenderingContext to get the pixels.

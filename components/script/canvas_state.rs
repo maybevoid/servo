@@ -30,7 +30,7 @@ use crate::dom::node::{window_from_node, Node, NodeDamage};
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use crate::dom::textmetrics::TextMetrics;
 use crate::unpremultiplytable::UNPREMULTIPLY_TABLE;
-use async_std::{task};
+use canvas::canvas_session;
 use canvas_traits::canvas::{CompositionOrBlending, FillOrStrokeStyle, FillRule};
 use canvas_traits::canvas::{Direction, TextAlign, TextBaseline};
 use canvas_traits::canvas::{LineCapStyle, LineJoinStyle, LinearGradientStyle};
@@ -196,7 +196,7 @@ impl CanvasState {
 
         debug!("[send_canvas_message] acquiring shared session");
 
-        // task::block_on(async move {
+        // canvas_session::RUNTIME.block_on(async move {
         //     async_acquire_shared_session ( session, move | chan | async move {
         //         choose! ( chan, Message,
         //             send_value_to! ( chan, message,
@@ -210,7 +210,7 @@ impl CanvasState {
         //     debug!("[send_canvas_message] released shared session");
         // });
 
-        let future = task::block_on(async move {
+        let future = canvas_session::RUNTIME.block_on(async move {
             enqueue_task(move || async move {
                 debug!("[send_canvas_message] acquiring shared session");
                 run_session(
@@ -223,7 +223,7 @@ impl CanvasState {
             }).await
         });
 
-        task::spawn(async move {
+        canvas_session::RUNTIME.spawn(async move {
             future.await;
         });
         // debug!("[send_canvas_message] released shared session");

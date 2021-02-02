@@ -101,11 +101,10 @@ use crate::session_history::{
     JointSessionHistory, NeedsToReload, SessionHistoryChange, SessionHistoryDiff,
 };
 use crate::timer_scheduler::TimerScheduler;
-use async_std::task;
 use background_hang_monitor::HangMonitorRegister;
 use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
-use canvas::canvas_session::{CanvasSession, CreateCanvasSession};
+use canvas::canvas_session::{self, CanvasSession, CreateCanvasSession};
 use canvas_traits::webgl::WebGLThreads;
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;
@@ -1821,7 +1820,7 @@ where
                     warn!("Error replying to remove iframe ({})", e);
                 }
             },
-            FromScriptMsg::CreateCanvasPaintThread(size, sender) => task::block_on(async move {
+            FromScriptMsg::CreateCanvasPaintThread(size, sender) => canvas_session::RUNTIME.block_on(async move {
                 self.handle_create_canvas_paint_thread_msg(size, sender)
                     .await
             }),

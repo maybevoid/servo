@@ -87,6 +87,7 @@ webrender_surfman = { path = "../webrender_surfman" }
 webrender_traits = { path = "../webrender_traits" }
 webxr = { git = "https://github.com/servo/webxr" }
 webxr-api = { git = "https://github.com/servo/webxr" }
+tokio = { version = "1.1.1", features = [ "full" ] }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "ios"), not(target_os = "android"), not(target_arch = "arm"), not(target_arch = "aarch64")))'.dependencies]
 gaol = "0.2.1"
