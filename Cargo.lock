@@ -4752,7 +4752,7 @@ checksum = "a871f1e45a3a3f0c73fb60343c811238bb5143a81642e27c2ac7aac27ff01a63"
 [[package]]
 name = "raqote"
 version = "0.8.1-alpha.0"
-source = "git+https://github.com/jdm/raqote?branch=fkup#ff5d2d1aa7813dbcacb0d028cf7d17c82a35d9d4"
+source = "git+https://github.com/ferrite-rs/raqote?branch=impl-send#b14aa7124a2e708abbfdaca06ffc224c27ebc3e4"
 dependencies = [
  "euclid",
  "font-kit",

@@ -28,6 +28,7 @@ use dom_struct::dom_struct;
 use euclid::{Scale, Size2D};
 use ferrite_session::*;
 use ipc_channel::ipc::IpcSender;
+use log::info;
 use servo_url::ServoUrl;
 use std::cell::Cell;
 use style_traits::CSSPixel;
@@ -56,28 +57,20 @@ impl PaintRenderingContext2D {
     }
 
     pub fn send_data(&self, sender: IpcSender<CanvasImageData>) {
+        info!("paintrenderingcontext2d.rs send_data");
         let session = self.context.get_canvas_session().clone();
-        let m_data = canvas_session::RUNTIME.block_on(async move {
+        self.context.enqueue_task(move || async move {
             debug!("acquiring shared session");
-            let res = canvas_session::enqueue_task(move || async move {
-                run_session_with_result(
-                    acquire_shared_session!(session, chan =>
-                            choose!(chan, FromLayout,
-                                receive_value_from!(chan, data =>
-                                    release_shared_session(chan,
-                                        send_value(data,
-                                            terminate()))))),
-                )
-                .await
-            }).await.await;
+            run_session(
+                acquire_shared_session!(session, chan =>
+                    choose!(chan, FromLayout,
+                        send_value_to!(chan, sender,
+                            release_shared_session(chan,
+                                    terminate())))))
+            .await;
             debug!("released shared session");
-            res
         });
-
-        match m_data {
-            Some(data) => sender.send(data).unwrap(),
-            None => return,
-        }
+        info!("send_data done");
     }
 
     pub fn take_missing_image_urls(&self) -> Vec<ServoUrl> {

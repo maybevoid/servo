@@ -29,7 +29,6 @@ use crate::dom::virtualmethods::VirtualMethods;
 use crate::dom::webgl2renderingcontext::WebGL2RenderingContext;
 use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
-use canvas::canvas_session;
 use base64;
 use canvas::canvas_session::*;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
@@ -40,6 +39,7 @@ use html5ever::{LocalName, Prefix};
 use image::png::PngEncoder;
 use image::ColorType;
 use ipc_channel::ipc::{self as ipcchan, IpcSharedMemory};
+use profile_traits::ipc;
 use js::error::throw_type_error;
 use js::rust::HandleValue;
 use script_layout_interface::{HTMLCanvasData, HTMLCanvasDataSource};
@@ -135,7 +135,10 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
         let source = unsafe {
             match self.unsafe_get().context.borrow_for_layout().as_ref() {
                 Some(&CanvasContext::Context2d(ref context)) => {
-                    HTMLCanvasDataSource::Image(Some(context.to_layout().get_canvas_session()))
+                    HTMLCanvasDataSource::Image(Some((
+                        context.to_layout().get_canvas_session(),
+                        context.to_layout().get_task_queue(),
+                    )))
                 },
                 Some(&CanvasContext::WebGL(ref context)) => {
                     context.to_layout().canvas_data_source()
@@ -299,24 +302,23 @@ impl HTMLCanvasElement {
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
                 let session = context.get_canvas_session().clone();
-                let data = canvas_session::RUNTIME.block_on(async move {
+                let (sender, receiver) =
+                    ipc::channel(self.global().time_profiler_chan().clone()).unwrap();
+
+                context.enqueue_task(move || async move {
                     debug!("acquiring shared session");
-                    let res = canvas_session::enqueue_task(move || async move {
-                        run_session_with_result(
-                            acquire_shared_session!(session, chan =>
-                                    choose!(chan, FromScript,
-                                        receive_value_from!(chan, data =>
-                                            release_shared_session(chan,
-                                                send_value(data,
-                                                    terminate()))))),
-                        )
-                        .await
-                    }).await.await;
+                    run_session(
+                        acquire_shared_session!(session, chan =>
+                                choose!(chan, FromScript,
+                                    send_value_to!(chan, sender,
+                                        release_shared_session(chan,
+                                            terminate())))),
+                    )
+                    .await;
                     debug!("released shared session");
-                    res
                 });
 
-                Some(data)
+                Some(receiver.recv().unwrap())
             },
             Some(&CanvasContext::WebGL(_)) => {
                 // TODO: add a method in WebGLRenderingContext to get the pixels.

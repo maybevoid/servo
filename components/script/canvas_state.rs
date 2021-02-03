@@ -41,7 +41,7 @@ use euclid::{
     default::{Point2D, Rect, Size2D, Transform2D},
     vec2,
 };
-use ipc_channel::ipc::IpcSharedMemory;
+use ipc_channel::ipc::{self, IpcSharedMemory};
 use net_traits::image_cache::{ImageCache, ImageResponse};
 use net_traits::request::CorsSettings;
 use pixels::PixelFormat;
@@ -51,6 +51,7 @@ use serde_bytes::ByteBuf;
 use servo_url::{ImmutableOrigin, ServoUrl};
 use std::cell::Cell;
 use std::fmt;
+use std::future::Future;
 use std::str::FromStr;
 use std::sync::Arc;
 use style::properties::longhands::font_variant_caps::computed_value::T as FontVariantCaps;
@@ -136,6 +137,8 @@ impl CanvasContextState {
 pub(crate) struct CanvasState {
     #[ignore_malloc_size_of = "Channels are hard"]
     session: SharedChannel<CanvasSession>,
+    #[ignore_malloc_size_of = "Channels are hard"]
+    queue: AsyncQueue,
     state: DomRefCell<CanvasContextState>,
     origin_clean: Cell<bool>,
     #[ignore_malloc_size_of = "Arc"]
@@ -172,7 +175,8 @@ impl CanvasState {
         };
 
         CanvasState {
-            session: session,
+            session: session.clone(),
+            queue: AsyncQueue::new(session),
             state: DomRefCell::new(CanvasContextState::new()),
             origin_clean: Cell::new(true),
             image_cache: global.image_cache(),
@@ -187,14 +191,32 @@ impl CanvasState {
         self.session.clone()
     }
 
+    pub fn get_task_queue(&self) -> AsyncQueue {
+        self.queue.clone()
+    }
+
+    pub fn enqueue_task <T, Fut> (
+        &self,
+        task: impl FnOnce() -> Fut
+             + Send + 'static
+    ) -> impl Future <
+        Output=Result<T, tokio::task::JoinError>
+        > + Send + 'static
+    where
+        T: Send + 'static,
+        Fut: Future< Output=T > + Send + 'static
+    {
+        self.queue.enqueue_task(task)
+    }
+
     pub fn get_missing_image_urls(&self) -> &DomRefCell<Vec<ServoUrl>> {
         &self.missing_image_urls
     }
 
     pub fn send_canvas_message(&self, message: CanvasMessage) {
-        let session = self.session.clone();
-
-        debug!("[send_canvas_message] acquiring shared session");
+        info!("send_canvas_message {:?}", message);
+        self.queue.send_canvas_message(message);
+        // let session = self.session.clone();
 
         // canvas_session::RUNTIME.block_on(async move {
         //     async_acquire_shared_session ( session, move | chan | async move {
@@ -210,22 +232,18 @@ impl CanvasState {
         //     debug!("[send_canvas_message] released shared session");
         // });
 
-        let future = canvas_session::RUNTIME.block_on(async move {
-            enqueue_task(move || async move {
-                debug!("[send_canvas_message] acquiring shared session");
-                run_session(
-                    acquire_shared_session ( session, move | chan | async move {
-                        choose! ( chan, Message,
-                            send_value_to! ( chan, message,
-                                release_shared_session (chan,
-                                    terminate! () ) ) )
-                    })).await
-            }).await
-        });
+        // self.enqueue_task(move || async move {
+        //     async_acquire_shared_session ( session, move | chan | async move {
+        //         choose! ( chan, Message,
+        //             send_value_to! ( chan, message,
+        //                 release_shared_session (chan,
+        //                     terminate! () ) ) )
+        //     }).await
+        // });
 
-        canvas_session::RUNTIME.spawn(async move {
-            future.await;
-        });
+        // canvas_session::RUNTIME.spawn(async move {
+        //     future.await;
+        // });
         // debug!("[send_canvas_message] released shared session");
     }
 
@@ -360,38 +378,33 @@ impl CanvasState {
 
         assert!(Rect::from_size(canvas_size).contains_rect(&rect));
 
-        debug!("[get_rect] acquiring shared session");
-
         let session = self.session.clone();
-        let mem: IpcSharedMemory = canvas_session::RUNTIME.block_on(async move {
-            enqueue_task(move || async move {
-                run_session_with_result(
-                    acquire_shared_session! ( session, chan => {
-                        choose! ( chan, GetImageData,
-                                send_value_to! ( chan, (rect, canvas_size),
-                                    receive_value_from! ( chan, image => {
-                                        release_shared_session ( chan,
-                                            send_value! ( image,
-                                                terminate! () ) )
-                                    }))
-                            )
-                        }))
-                        .await
-            }).await.await
+        let (bytes_sender, bytes_receiver) = ipc::bytes_channel().unwrap();
+
+        self.enqueue_task(move || async move {
+            debug!("[get_rect] acquiring shared session");
+            run_session (
+                acquire_shared_session! ( session, chan => {
+                    choose! ( chan, GetImageData,
+                        send_value_to! ( chan, (rect, canvas_size, bytes_sender),
+                            release_shared_session ( chan,
+                                terminate! () ) ) )
+                    }))
+                    .await;
+            debug!("[get_rect] released shared session");
         });
 
-        debug!("[get_rect] released shared session");
 
-        let mut data = mem.to_vec();
+        let mut pixels = bytes_receiver.recv().unwrap().to_vec();
 
-        for chunk in data.chunks_mut(4) {
+        for chunk in pixels.chunks_mut(4) {
             let b = chunk[0];
             chunk[0] = UNPREMULTIPLY_TABLE[256 * (chunk[3] as usize) + chunk[2] as usize];
             chunk[1] = UNPREMULTIPLY_TABLE[256 * (chunk[3] as usize) + chunk[1] as usize];
             chunk[2] = UNPREMULTIPLY_TABLE[256 * (chunk[3] as usize) + b as usize];
         }
 
-        data
+        pixels
     }
 
     //
@@ -1528,7 +1541,7 @@ impl CanvasState {
         debug!("[is_point_in_path] acquiring shared session");
         let session = self.session.clone();
         let res = canvas_session::RUNTIME.block_on(async move {
-            enqueue_task(move || async move {
+            self.enqueue_task(move || async move {
                 run_session_with_result(acquire_shared_session! ( session, chan => {
                     choose! ( chan, IsPointInPath,
                         send_value_to! ( chan, (x, y, fill_rule),
@@ -1539,7 +1552,7 @@ impl CanvasState {
                             }) ) )
                 }))
                 .await
-            }).await.await
+            }).await.unwrap()
         });
 
         debug!("[is_point_in_path] released shared session");
@@ -1611,7 +1624,7 @@ impl CanvasState {
         debug!("[get_transform] acquiring shared session");
         let session = self.session.clone();
         let transform = canvas_session::RUNTIME.block_on(async move {
-            enqueue_task(move || async move {
+            self.enqueue_task(move || async move {
                 run_session_with_result(acquire_shared_session! ( session, chan => {
                     choose! ( chan, GetTransform,
                         receive_value_from! ( chan, transform => {
@@ -1621,7 +1634,7 @@ impl CanvasState {
                         } ))
                 }))
                 .await
-            }).await.await
+            }).await.unwrap()
         });
         debug!("[get_transform] released shared session");
 

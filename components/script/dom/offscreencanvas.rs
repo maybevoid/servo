@@ -21,7 +21,8 @@ use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 use ferrite_session::*;
-use ipc_channel::ipc::IpcSharedMemory;
+use ipc_channel::ipc::{IpcSharedMemory};
+use profile_traits::ipc;
 use js::rust::HandleValue;
 use std::cell::Cell;
 
@@ -106,24 +107,23 @@ impl OffscreenCanvas {
         let data = match self.context.borrow().as_ref() {
             Some(&OffscreenCanvasContext::OffscreenContext2d(ref context)) => {
                 let session = context.get_canvas_session().clone();
-                let data = canvas_session::RUNTIME.block_on(async move {
+                let (sender, receiver) =
+                    ipc::channel(self.global().time_profiler_chan().clone()).unwrap();
+
+                context.enqueue_task(move || async move {
                     debug!("acquiring shared session");
-                    let res = canvas_session::enqueue_task(move || async move {
-                        run_session_with_result(
-                            acquire_shared_session!(session, chan =>
-                                    choose!(chan, FromScript,
-                                        receive_value_from!(chan, data =>
-                                            release_shared_session(chan,
-                                                send_value(data,
-                                                    terminate()))))),
-                        )
-                        .await
-                    }).await.await;
+                    run_session(
+                        acquire_shared_session!(session, chan =>
+                                choose!(chan, FromScript,
+                                    send_value_to!(chan, sender,
+                                        release_shared_session(chan,
+                                            terminate())))),
+                    )
+                    .await;
                     debug!("released shared session");
-                    res
                 });
 
-                Some(data)
+                Some(receiver.recv().unwrap())
             },
             None => None,
         };

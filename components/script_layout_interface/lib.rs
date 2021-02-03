@@ -122,7 +122,7 @@ pub enum LayoutElementType {
 
 pub enum HTMLCanvasDataSource {
     WebGL(webrender_api::ImageKey),
-    Image(Option<SharedChannel<CanvasSession>>),
+    Image(Option<(SharedChannel<CanvasSession>, AsyncQueue)>),
     WebGPU(webrender_api::ImageKey),
 }
 

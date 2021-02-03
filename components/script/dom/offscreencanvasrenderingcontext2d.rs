@@ -30,6 +30,7 @@ use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 use ferrite_session::*;
+use std::future::Future;
 
 #[dom_struct]
 pub struct OffscreenCanvasRenderingContext2D {
@@ -69,6 +70,24 @@ impl OffscreenCanvasRenderingContext2D {
 
     pub fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
         self.canvas_state.get_canvas_session()
+    }
+
+    pub fn get_task_queue(&self) -> AsyncQueue {
+        self.canvas_state.get_task_queue()
+    }
+
+    pub fn enqueue_task <T, Fut> (
+        &self,
+        task: impl FnOnce() -> Fut
+             + Send + 'static
+    ) -> impl Future <
+        Output=Result<T, tokio::task::JoinError>
+        > + Send + 'static
+    where
+        T: Send + 'static,
+        Fut: Future< Output=T > + Send + 'static
+    {
+        self.canvas_state.enqueue_task(task)
     }
 
     pub fn set_canvas_bitmap_dimensions(&self, size: Size2D<u64>) {

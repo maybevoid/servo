@@ -30,6 +30,7 @@ use euclid::default::{Point2D, Rect, Size2D};
 use ferrite_session::*;
 use servo_url::ServoUrl;
 use std::mem;
+use std::future::Future;
 
 // https://html.spec.whatwg.org/multipage/#canvasrenderingcontext2d
 #[dom_struct]
@@ -72,6 +73,24 @@ impl CanvasRenderingContext2D {
 
     pub fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
         self.canvas_state.get_canvas_session()
+    }
+
+    pub fn get_task_queue(&self) -> AsyncQueue {
+        self.canvas_state.get_task_queue()
+    }
+
+    pub fn enqueue_task <T, Fut> (
+        &self,
+        task: impl FnOnce() -> Fut
+             + Send + 'static
+    ) -> impl Future <
+        Output=Result<T, tokio::task::JoinError>
+        > + Send + 'static
+    where
+        T: Send + 'static,
+        Fut: Future< Output=T > + Send + 'static
+    {
+        self.canvas_state.enqueue_task(task)
     }
 
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
@@ -124,6 +143,11 @@ impl LayoutDom<'_, CanvasRenderingContext2D> {
     #[allow(unsafe_code)]
     pub unsafe fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
         self.unsafe_get().get_canvas_session()
+    }
+
+    #[allow(unsafe_code)]
+    pub unsafe fn get_task_queue(&self) -> AsyncQueue {
+        self.unsafe_get().get_task_queue()
     }
 }
 
