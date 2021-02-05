@@ -16,7 +16,6 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::offscreencanvasrenderingcontext2d::OffscreenCanvasRenderingContext2D;
 use crate::script_runtime::JSContext;
-use canvas::canvas_session;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
@@ -110,7 +109,7 @@ impl OffscreenCanvas {
                 let (sender, receiver) =
                     ipc::channel(self.global().time_profiler_chan().clone()).unwrap();
 
-                context.enqueue_task(move || async move {
+                let _ = context.enqueue_task(move || async move {
                     debug!("acquiring shared session");
                     run_session(
                         acquire_shared_session!(session, chan =>

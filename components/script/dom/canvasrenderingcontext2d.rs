@@ -31,6 +31,7 @@ use ferrite_session::*;
 use servo_url::ServoUrl;
 use std::mem;
 use std::future::Future;
+use tokio::task;
 
 // https://html.spec.whatwg.org/multipage/#canvasrenderingcontext2d
 #[dom_struct]
@@ -83,9 +84,7 @@ impl CanvasRenderingContext2D {
         &self,
         task: impl FnOnce() -> Fut
              + Send + 'static
-    ) -> impl Future <
-        Output=Result<T, tokio::task::JoinError>
-        > + Send + 'static
+    ) -> task::JoinHandle< T >
     where
         T: Send + 'static,
         Fut: Future< Output=T > + Send + 'static

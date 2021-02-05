@@ -305,7 +305,7 @@ impl HTMLCanvasElement {
                 let (sender, receiver) =
                     ipc::channel(self.global().time_profiler_chan().clone()).unwrap();
 
-                context.enqueue_task(move || async move {
+                let _ = context.enqueue_task(move || async move {
                     debug!("acquiring shared session");
                     run_session(
                         acquire_shared_session!(session, chan =>

@@ -9,7 +9,7 @@ use style::properties::style_structs::Font as FontStyleStruct;
 use std::pin::Pin;
 use std::future::{Future};
 use std::time::Duration;
-use tokio::{time, runtime, sync::mpsc};
+use tokio::{task, time, runtime, sync::mpsc};
 use lazy_static::lazy_static;
 use crate::canvas_data::*;
 use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
@@ -392,18 +392,16 @@ pub struct AsyncQueue {
     mpsc::UnboundedSender < QueueItem >
 }
 
-async fn send_canvas_messages (
+fn send_canvas_messages (
   session: SharedChannel < CanvasSession >,
   messages: Vec < CanvasMessage >,
 ) {
-  run_session (
-    acquire_shared_session ( session, move | chan | async move {
-        choose! ( chan, Messages,
-            send_value_to! ( chan, messages,
-                release_shared_session (chan,
-                    terminate! () ) ) )
-    })
-  ).await
+  async_acquire_shared_session ( session, move | chan | async move {
+      choose! ( chan, Messages,
+          send_value_to! ( chan, messages,
+              release_shared_session (chan,
+                  terminate! () ) ) )
+  });
 }
 
 impl AsyncQueue {
@@ -426,7 +424,7 @@ impl AsyncQueue {
                             send_canvas_messages(
                               session.clone(),
                               messages.split_off(0)
-                            ).await;
+                            );
                           }
                         },
                         QueueItem::Task(task) => {
@@ -434,7 +432,7 @@ impl AsyncQueue {
                             send_canvas_messages(
                               session.clone(),
                               messages.split_off(0)
-                            ).await;
+                            );
                           }
 
                           task.await;
@@ -470,9 +468,7 @@ impl AsyncQueue {
         &self,
         task: impl FnOnce() -> Fut
              + Send + 'static
-    ) -> impl Future <
-      Output=Result<T, tokio::task::JoinError>
-    > + Send + 'static
+    ) -> task::JoinHandle< T >
     where
         T: Send + 'static,
         Fut: Future< Output=T > + Send + 'static
@@ -480,7 +476,7 @@ impl AsyncQueue {
         let (sender, receiver) = once_channel();
         let job = Box::pin(async move {
             let res = task().await;
-            sender.send(res).await.unwrap();
+            sender.send(res).unwrap();
         });
         self.task_sender.send(QueueItem::Task(job)).ok().unwrap();
 

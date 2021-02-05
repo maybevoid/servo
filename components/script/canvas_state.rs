@@ -58,6 +58,7 @@ use style::properties::longhands::font_variant_caps::computed_value::T as FontVa
 use style::properties::style_structs::Font;
 use style::values::computed::font::FontStyle;
 use style_traits::values::ToCss;
+use tokio::task;
 
 use canvas::canvas_session::*;
 use ferrite_session::*;
@@ -199,9 +200,7 @@ impl CanvasState {
         &self,
         task: impl FnOnce() -> Fut
              + Send + 'static
-    ) -> impl Future <
-        Output=Result<T, tokio::task::JoinError>
-        > + Send + 'static
+    ) -> task::JoinHandle< T >
     where
         T: Send + 'static,
         Fut: Future< Output=T > + Send + 'static
