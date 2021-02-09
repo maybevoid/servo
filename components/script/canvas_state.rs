@@ -41,7 +41,7 @@ use euclid::{
     default::{Point2D, Rect, Size2D, Transform2D},
     vec2,
 };
-use ipc_channel::ipc::{self, IpcSharedMemory};
+use ipc_channel::ipc::{IpcSharedMemory};
 use net_traits::image_cache::{ImageCache, ImageResponse};
 use net_traits::request::CorsSettings;
 use pixels::PixelFormat;
@@ -378,23 +378,22 @@ impl CanvasState {
         assert!(Rect::from_size(canvas_size).contains_rect(&rect));
 
         let session = self.session.clone();
-        let (bytes_sender, bytes_receiver) = ipc::bytes_channel().unwrap();
 
-        self.enqueue_task(move || async move {
-            debug!("[get_rect] acquiring shared session");
-            run_session (
-                acquire_shared_session! ( session, chan => {
-                    choose! ( chan, GetImageData,
-                        send_value_to! ( chan, (rect, canvas_size, bytes_sender),
-                            release_shared_session ( chan,
-                                terminate! () ) ) )
-                    }))
-                    .await;
-            debug!("[get_rect] released shared session");
-        });
+        let data = canvas_session::RUNTIME.block_on(async move {
+            self.enqueue_task(move || async move {
+                run_session_with_result (
+                    acquire_shared_session! ( session, chan =>
+                        choose! ( chan, GetImageData,
+                            send_value_to! ( chan, (rect, canvas_size),
+                                receive_value_from!( chan, data =>
+                                    release_shared_session ( chan,
+                                        send_value ( data,
+                                            terminate! ()
+                                        ))))))).await
+            }).await
+        }).unwrap();
 
-
-        let mut pixels = bytes_receiver.recv().unwrap().to_vec();
+        let mut pixels = (&data).to_vec();
 
         for chunk in pixels.chunks_mut(4) {
             let b = chunk[0];

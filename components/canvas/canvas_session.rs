@@ -2,7 +2,7 @@ use ferrite_session::*;
 
 use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
-use ipc_channel::ipc::{self, IpcSharedMemory};
+use ipc_channel::ipc::{IpcSharedMemory};
 use serde;
 use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
@@ -70,8 +70,11 @@ define_choice! { CanvasOps;
     Z
   >,
   GetImageData: ReceiveValue <
-    ( Rect<u64>, Size2D<u64>, ipc::IpcBytesSender ),
-    Z
+    ( Rect<u64>, Size2D<u64>),
+    SendValue <
+      IpcSharedMemory,
+      Z
+    >
   >,
   IsPointInPath: ReceiveValue <
     ( f64, f64, FillRule ),
@@ -233,14 +236,14 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
       },
       GetImageData => {
         info!("GetImageData");
-        receive_value( move | msg: ( Rect<u64>, Size2D<u64>, ipc::IpcBytesSender ) | async move {
-          let (dest_rect, canvas_size, sender) = msg;
+        receive_value( move | msg: ( Rect<u64>, Size2D<u64> ) | async move {
+          let (dest_rect, canvas_size) = msg;
           let pixels = canvas.read_pixels(dest_rect, canvas_size);
-          sender.send(&pixels).unwrap();
 
-          detach_shared_session (
-            canvas_session ( canvas )
-          )
+          send_value( IpcSharedMemory::from_bytes(&pixels),
+            detach_shared_session (
+              canvas_session ( canvas )
+            ))
         })
       },
       IsPointInPath => {
