@@ -30,6 +30,7 @@ use crate::dom::webgl2renderingcontext::WebGL2RenderingContext;
 use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
 use base64;
+use canvas::canvas_session;
 use canvas::canvas_session::*;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
 use dom_struct::dom_struct;
@@ -39,7 +40,6 @@ use html5ever::{LocalName, Prefix};
 use image::png::PngEncoder;
 use image::ColorType;
 use ipc_channel::ipc::{self as ipcchan, IpcSharedMemory};
-use profile_traits::ipc;
 use js::error::throw_type_error;
 use js::rust::HandleValue;
 use script_layout_interface::{HTMLCanvasData, HTMLCanvasDataSource};
@@ -302,23 +302,21 @@ impl HTMLCanvasElement {
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
                 let session = context.get_canvas_session().clone();
-                let (sender, receiver) =
-                    ipc::channel(self.global().time_profiler_chan().clone()).unwrap();
 
-                let _ = context.enqueue_task(move || async move {
-                    debug!("acquiring shared session");
-                    run_session(
-                        acquire_shared_session!(session, chan =>
+                let res = canvas_session::RUNTIME.block_on(async move {
+                    context.enqueue_task(move || async move {
+                        run_session_with_result(
+                            acquire_shared_session!(session, chan =>
                                 choose!(chan, FromScript,
-                                    send_value_to!(chan, sender,
+                                    receive_value_from!(chan, data =>
                                         release_shared_session(chan,
-                                            terminate())))),
-                    )
-                    .await;
-                    debug!("released shared session");
-                });
+                                            send_value( data,
+                                                terminate()))))))
+                        .await
+                    }).await
+                }).unwrap();
 
-                Some(receiver.recv().unwrap())
+                Some(res)
             },
             Some(&CanvasContext::WebGL(_)) => {
                 // TODO: add a method in WebGLRenderingContext to get the pixels.

@@ -84,8 +84,8 @@ define_choice! { CanvasOps;
     Option<CanvasImageData>,
     Z
   >,
-  FromScript: ReceiveValue <
-    ipc::IpcSender<IpcSharedMemory>,
+  FromScript: SendValue <
+    IpcSharedMemory,
     Z
   >,
 }
@@ -264,13 +264,11 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
       },
       FromScript => {
         info!("FromScript");
-        receive_value! ( sender => {
-          canvas.send_pixels(sender);
-
+        let bytes = canvas.get_pixels();
+        send_value( IpcSharedMemory::from_bytes(&bytes),
           detach_shared_session (
             canvas_session ( canvas )
-          )
-        })
+          ))
       },
     })
 }
