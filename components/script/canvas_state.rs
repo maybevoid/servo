@@ -52,11 +52,13 @@ use servo_url::{ImmutableOrigin, ServoUrl};
 use std::cell::Cell;
 use std::fmt;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc};
+use std::time::Duration;
 use style::properties::longhands::font_variant_caps::computed_value::T as FontVariantCaps;
 use style::properties::style_structs::Font;
 use style::values::computed::font::FontStyle;
 use style_traits::values::ToCss;
+use tokio::{task, time};
 use ferrite_session::*;
 
 #[unrooted_must_root_lint::must_root]
@@ -135,6 +137,8 @@ pub(crate) struct CanvasState {
     #[ignore_malloc_size_of = "Channels are hard"]
     session: SharedChannel<CanvasSession>,
     #[ignore_malloc_size_of = "Channels are hard"]
+    messages: MessageBuffer,
+    #[ignore_malloc_size_of = "Channels are hard"]
     state: DomRefCell<CanvasContextState>,
     origin_clean: Cell<bool>,
     #[ignore_malloc_size_of = "Arc"]
@@ -172,6 +176,7 @@ impl CanvasState {
 
         CanvasState {
             session: session.clone(),
+            messages: MessageBuffer::new(),
             state: DomRefCell::new(CanvasContextState::new()),
             origin_clean: Cell::new(true),
             image_cache: global.image_cache(),
@@ -186,13 +191,31 @@ impl CanvasState {
         self.session.clone()
     }
 
+    pub fn get_message_buffer(&self) -> MessageBuffer {
+        self.messages.clone()
+    }
+
     pub fn get_missing_image_urls(&self) -> &DomRefCell<Vec<ServoUrl>> {
         &self.missing_image_urls
     }
 
     pub fn send_canvas_message(&self, message: CanvasMessage) {
-        info!("send_canvas_message {:?}", message);
-        send_canvas_message(self.session.clone(), message);
+        let mut messages = self.messages.0.lock().unwrap();
+        let was_empty = messages.is_empty();
+        messages.push(message);
+
+        if was_empty {
+            let session = self.session.clone();
+            let messages = self.messages.clone();
+            task::spawn(async move {
+                time::sleep(Duration::from_millis(20)).await;
+                flush_messages(session, &messages);
+            });
+        }
+    }
+
+    pub fn flush_messages(&self) {
+        flush_messages(self.session.clone(), &self.messages);
     }
 
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
@@ -326,6 +349,7 @@ impl CanvasState {
 
         assert!(Rect::from_size(canvas_size).contains_rect(&rect));
 
+        self.flush_messages();
         let session = self.session.clone();
 
         let data = block_on(
@@ -1484,6 +1508,7 @@ impl CanvasState {
         };
 
         debug!("[is_point_in_path] acquiring shared session");
+        self.flush_messages();
         let session = self.session.clone();
         let res = block_on(
             async_acquire_shared_session_with_result ( session,
@@ -1563,6 +1588,7 @@ impl CanvasState {
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-gettransform
     pub fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
         debug!("[get_transform] acquiring shared session");
+        self.flush_messages();
         let session = self.session.clone();
         let transform = block_on(
             async_acquire_shared_session_with_result ( session,

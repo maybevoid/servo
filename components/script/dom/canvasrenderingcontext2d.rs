@@ -74,6 +74,10 @@ impl CanvasRenderingContext2D {
         self.canvas_state.get_canvas_session()
     }
 
+    pub fn get_message_buffer(&self) -> MessageBuffer {
+        self.canvas_state.get_message_buffer()
+    }
+
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
     pub fn set_bitmap_dimensions(&self, size: Size2D<u32>) {
         self.reset_to_initial_state();
@@ -121,9 +125,14 @@ impl CanvasRenderingContext2D {
 }
 
 impl LayoutDom<'_, CanvasRenderingContext2D> {
-    #[allow(unsafe_code)]
+#[allow(unsafe_code)]
     pub unsafe fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
         self.unsafe_get().get_canvas_session()
+    }
+
+    #[allow(unsafe_code)]
+    pub unsafe fn get_message_buffer(&self) -> MessageBuffer {
+        self.unsafe_get().get_message_buffer()
     }
 }
 

@@ -104,6 +104,7 @@ impl OffscreenCanvas {
 
         let data = match self.context.borrow().as_ref() {
             Some(&OffscreenCanvasContext::OffscreenContext2d(ref context)) => {
+                flush_messages(context.get_canvas_session(), &context.get_message_buffer());
                 let session = context.get_canvas_session().clone();
 
                 let res = block_on(

@@ -134,8 +134,9 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
         let source = unsafe {
             match self.unsafe_get().context.borrow_for_layout().as_ref() {
                 Some(&CanvasContext::Context2d(ref context)) => {
-                    HTMLCanvasDataSource::Image(Some(
-                        context.to_layout().get_canvas_session()))
+                    HTMLCanvasDataSource::Image(Some((
+                        context.to_layout().get_canvas_session(),
+                        context.to_layout().get_message_buffer())))
                 },
                 Some(&CanvasContext::WebGL(ref context)) => {
                     context.to_layout().canvas_data_source()
@@ -298,6 +299,7 @@ impl HTMLCanvasElement {
 
         let data = match self.context.borrow().as_ref() {
             Some(&CanvasContext::Context2d(ref context)) => {
+                flush_messages(context.get_canvas_session(), &context.get_message_buffer());
                 let session = context.get_canvas_session().clone();
 
                 let res = block_on(

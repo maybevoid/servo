@@ -71,6 +71,10 @@ impl OffscreenCanvasRenderingContext2D {
         self.canvas_state.get_canvas_session()
     }
 
+    pub fn get_message_buffer(&self) -> MessageBuffer {
+        self.canvas_state.get_message_buffer()
+    }
+
     pub fn set_canvas_bitmap_dimensions(&self, size: Size2D<u64>) {
         self.canvas_state.set_bitmap_dimensions(size);
     }

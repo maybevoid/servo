@@ -7,6 +7,7 @@ use serde;
 use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
 use std::future::{Future};
+use std::sync::{Arc, Mutex};
 use tokio::{task, runtime};
 use lazy_static::lazy_static;
 use crate::canvas_data::*;
@@ -395,6 +396,15 @@ pub fn block_on<F: Future>(future: F) -> F::Output
   RUNTIME.block_on(future)
 }
 
+#[derive(Clone)]
+pub struct MessageBuffer ( pub Arc < Mutex < Vec < CanvasMessage > > > );
+
+impl MessageBuffer {
+  pub fn new() -> MessageBuffer {
+    MessageBuffer(Arc::new(Mutex::new(vec![])))
+  }
+}
+
 pub fn send_canvas_messages (
   session: SharedChannel < CanvasSession >,
   messages: Vec < CanvasMessage >,
@@ -405,6 +415,17 @@ pub fn send_canvas_messages (
               release_shared_session (chan,
                   terminate! () ) ) )
   });
+}
+
+pub fn flush_messages (
+  session: SharedChannel < CanvasSession >,
+  messages: &MessageBuffer
+) {
+    let mut messages = messages.0.lock().unwrap();
+    if ! messages.is_empty() {
+        let messages2 = messages.split_off(0);
+        send_canvas_messages(session, messages2);
+    }
 }
 
 pub fn send_canvas_message (

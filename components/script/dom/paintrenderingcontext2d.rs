@@ -56,6 +56,7 @@ impl PaintRenderingContext2D {
 
     pub fn get_data(&self) -> Option<CanvasImageData> {
         info!("paintrenderingcontext2d.rs send_data");
+        flush_messages(self.context.get_canvas_session(), &self.context.get_message_buffer());
         let session = self.context.get_canvas_session().clone();
         let res = block_on(
             async_acquire_shared_session_with_result(session,
