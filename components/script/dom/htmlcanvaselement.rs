@@ -30,7 +30,6 @@ use crate::dom::webgl2renderingcontext::WebGL2RenderingContext;
 use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
 use base64;
-use canvas::canvas_session;
 use canvas::canvas_session::*;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
 use dom_struct::dom_struct;
@@ -303,18 +302,18 @@ impl HTMLCanvasElement {
             Some(&CanvasContext::Context2d(ref context)) => {
                 let session = context.get_canvas_session().clone();
 
-                let res = canvas_session::RUNTIME.block_on(async move {
+                let res = block_on(async move {
                     context.enqueue_task(move || async move {
-                        run_session_with_result(
-                            acquire_shared_session!(session, chan =>
+                        async_acquire_shared_session_with_result (session,
+                            move | chan | async move {
                                 choose!(chan, FromScript,
                                     receive_value_from!(chan, data =>
                                         release_shared_session(chan,
                                             send_value( data,
-                                                terminate()))))))
-                        .await
-                    }).await
-                }).unwrap();
+                                                terminate()))))
+                            })
+                    }).await.unwrap().await.unwrap()
+                });
 
                 Some(res)
             },

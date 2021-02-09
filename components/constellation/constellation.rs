@@ -104,7 +104,7 @@ use crate::timer_scheduler::TimerScheduler;
 use background_hang_monitor::HangMonitorRegister;
 use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
-use canvas::canvas_session::{self, CanvasSession, CreateCanvasSession};
+use canvas::canvas_session::{self, CanvasSession, CreateCanvasSession, block_on};
 use canvas_traits::webgl::WebGLThreads;
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;
@@ -925,6 +925,7 @@ where
                     user_agent: state.user_agent,
                 };
 
+                let _guard = canvas_session::RUNTIME.enter();
                 constellation.run();
             })
             .expect("Thread spawning failed");
@@ -1821,7 +1822,7 @@ where
                 }
             },
             FromScriptMsg::CreateCanvasPaintThread(size, sender) =>
-                canvas_session::RUNTIME.block_on(async move {
+                block_on(async move {
                     self.handle_create_canvas_paint_thread_msg(size, sender)
                         .await
                 }),
@@ -4373,14 +4374,15 @@ where
         response_sender: IpcSender<SharedChannel<CanvasSession>>,
     ) {
         let antialias = self.enable_canvas_antialiasing;
-        let canvas = run_session_with_result(acquire_shared_session!(self.canvas_session, chan =>
-        send_value_to!( chan, (size, antialias),
-            receive_value_from!(chan, canvas =>
-                release_shared_session(chan,
-                    send_value!(canvas,
-                        terminate()))
-            ))))
-        .await;
+        let canvas = run_session_with_result(
+            acquire_shared_session!(self.canvas_session, chan =>
+                send_value_to!( chan, (size, antialias),
+                    receive_value_from!(chan, canvas =>
+                        release_shared_session(chan,
+                            send_value!(canvas,
+                                terminate()))
+                    ))))
+            .await;
 
         debug!("created canvas");
 

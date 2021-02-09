@@ -30,7 +30,7 @@ use crate::dom::node::{window_from_node, Node, NodeDamage};
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use crate::dom::textmetrics::TextMetrics;
 use crate::unpremultiplytable::UNPREMULTIPLY_TABLE;
-use canvas::canvas_session;
+use canvas::canvas_session::*;
 use canvas_traits::canvas::{CompositionOrBlending, FillOrStrokeStyle, FillRule};
 use canvas_traits::canvas::{Direction, TextAlign, TextBaseline};
 use canvas_traits::canvas::{LineCapStyle, LineJoinStyle, LinearGradientStyle};
@@ -59,8 +59,6 @@ use style::properties::style_structs::Font;
 use style::values::computed::font::FontStyle;
 use style_traits::values::ToCss;
 use tokio::task;
-
-use canvas::canvas_session::*;
 use ferrite_session::*;
 
 #[unrooted_must_root_lint::must_root]
@@ -215,35 +213,6 @@ impl CanvasState {
     pub fn send_canvas_message(&self, message: CanvasMessage) {
         info!("send_canvas_message {:?}", message);
         self.queue.send_canvas_message(message);
-        // let session = self.session.clone();
-
-        // canvas_session::RUNTIME.block_on(async move {
-        //     async_acquire_shared_session ( session, move | chan | async move {
-        //         choose! ( chan, Message,
-        //             send_value_to! ( chan, message,
-        //                 release_shared_session (chan,
-        //                     terminate! () ) ) )
-        //     }).await;
-        // });
-
-        // task::spawn(async move {
-        //     future.await;
-        //     debug!("[send_canvas_message] released shared session");
-        // });
-
-        // self.enqueue_task(move || async move {
-        //     async_acquire_shared_session ( session, move | chan | async move {
-        //         choose! ( chan, Message,
-        //             send_value_to! ( chan, message,
-        //                 release_shared_session (chan,
-        //                     terminate! () ) ) )
-        //     }).await
-        // });
-
-        // canvas_session::RUNTIME.spawn(async move {
-        //     future.await;
-        // });
-        // debug!("[send_canvas_message] released shared session");
     }
 
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
@@ -379,19 +348,20 @@ impl CanvasState {
 
         let session = self.session.clone();
 
-        let data = canvas_session::RUNTIME.block_on(async move {
+        let data = block_on(async move {
             self.enqueue_task(move || async move {
-                run_session_with_result (
-                    acquire_shared_session! ( session, chan =>
+                async_acquire_shared_session_with_result ( session,
+                    move | chan | async move {
                         choose! ( chan, GetImageData,
                             send_value_to! ( chan, (rect, canvas_size),
                                 receive_value_from!( chan, data =>
                                     release_shared_session ( chan,
                                         send_value ( data,
                                             terminate! ()
-                                        ))))))).await
-            }).await
-        }).unwrap();
+                                        )))))
+                    })
+            }).await.unwrap().await.unwrap()
+        });
 
         let mut pixels = (&data).to_vec();
 
@@ -1538,19 +1508,19 @@ impl CanvasState {
 
         debug!("[is_point_in_path] acquiring shared session");
         let session = self.session.clone();
-        let res = canvas_session::RUNTIME.block_on(async move {
+        let res = block_on(async move {
             self.enqueue_task(move || async move {
-                run_session_with_result(acquire_shared_session! ( session, chan => {
-                    choose! ( chan, IsPointInPath,
-                        send_value_to! ( chan, (x, y, fill_rule),
-                            receive_value_from! ( chan, result => {
-                                release_shared_session ( chan,
-                                    send_value! ( result,
-                                        terminate () ) )
-                            }) ) )
-                }))
-                .await
-            }).await.unwrap()
+                async_acquire_shared_session_with_result ( session,
+                    move | chan | async move {
+                        choose! ( chan, IsPointInPath,
+                            send_value_to! ( chan, (x, y, fill_rule),
+                                receive_value_from! ( chan, result => {
+                                    release_shared_session ( chan,
+                                        send_value! ( result,
+                                            terminate () ) )
+                                }) ) )
+                    })
+            }).await.unwrap().await.unwrap()
         });
 
         debug!("[is_point_in_path] released shared session");
@@ -1621,18 +1591,18 @@ impl CanvasState {
     pub fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
         debug!("[get_transform] acquiring shared session");
         let session = self.session.clone();
-        let transform = canvas_session::RUNTIME.block_on(async move {
+        let transform = block_on(async move {
             self.enqueue_task(move || async move {
-                run_session_with_result(acquire_shared_session! ( session, chan => {
-                    choose! ( chan, GetTransform,
-                        receive_value_from! ( chan, transform => {
-                            release_shared_session ( chan,
-                                send_value! ( transform,
-                                    terminate () ))
-                        } ))
-                }))
-                .await
-            }).await.unwrap()
+                async_acquire_shared_session_with_result ( session,
+                    move | chan | async move {
+                        choose! ( chan, GetTransform,
+                            receive_value_from! ( chan, transform => {
+                                release_shared_session ( chan,
+                                    send_value! ( transform,
+                                        terminate () ))
+                            } ))
+                    })
+            }).await.unwrap().await.unwrap()
         });
         debug!("[get_transform] released shared session");
 

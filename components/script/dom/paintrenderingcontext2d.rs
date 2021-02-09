@@ -21,7 +21,6 @@ use crate::dom::canvaspattern::CanvasPattern;
 use crate::dom::canvasrenderingcontext2d::CanvasRenderingContext2D;
 use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
-use canvas::canvas_session;
 use canvas::canvas_session::*;
 use canvas_traits::canvas::CanvasImageData;
 use dom_struct::dom_struct;
@@ -58,18 +57,18 @@ impl PaintRenderingContext2D {
     pub fn get_data(&self) -> Option<CanvasImageData> {
         info!("paintrenderingcontext2d.rs send_data");
         let session = self.context.get_canvas_session().clone();
-        let res = canvas_session::RUNTIME.block_on(async move {
+        let res = block_on(async move {
             self.context.enqueue_task(move || async move {
-                run_session_with_result (
-                    acquire_shared_session!(session, chan =>
+                async_acquire_shared_session_with_result(session,
+                    move | chan | async move {
                         choose!(chan, FromLayout,
                             receive_value_from!(chan, res =>
                                 release_shared_session(chan,
                                     send_value ( res,
-                                        terminate()))))))
-                .await
-            }).await
-        }).unwrap();
+                                        terminate()))))
+                })
+            }).await.unwrap().await.unwrap()
+        });
 
         info!("send_data done");
         res

@@ -85,6 +85,7 @@ use crate::task_source::TaskSource;
 use crate::task_source::TaskSourceName;
 use crate::webdriver_handlers;
 use bluetooth_traits::BluetoothRequest;
+use canvas::canvas_session;
 use canvas_traits::webgl::WebGLPipeline;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use devtools_traits::CSSError;
@@ -1444,6 +1445,7 @@ impl ScriptThread {
     /// messages on its port.
     pub fn start(&self) {
         debug!("Starting script thread.");
+        let _guard = canvas_session::RUNTIME.enter();
         while self.handle_msgs() {
             // Go on...
             debug!("Running script thread.");

@@ -374,6 +374,29 @@ lazy_static! {
       .unwrap();
 }
 
+pub fn spawn<T>(task: T) ->
+  task::JoinHandle<T::Output>
+where
+  T: Future + Send + 'static,
+  T::Output: Send + 'static,
+{
+  task::spawn(task)
+}
+
+pub fn spawn_blocking<F, R>(f: F) ->
+  task::JoinHandle<R>
+where
+  F: FnOnce() -> R + Send + 'static,
+  R: Send + 'static,
+{
+  task::spawn_blocking(f)
+}
+
+pub fn block_on<F: Future>(future: F) -> F::Output
+{
+  RUNTIME.block_on(future)
+}
+
 enum QueueItem {
   Yield,
   Message( CanvasMessage ),
@@ -407,7 +430,7 @@ impl AsyncQueue {
         let (sender, mut receiver) = mpsc::unbounded_channel();
         let mut messages: Vec<CanvasMessage> = vec![];
 
-        RUNTIME.spawn(async move {
+        spawn(async move {
             loop {
                 match receiver.recv().await {
                     Some(item) => {
@@ -441,7 +464,7 @@ impl AsyncQueue {
         });
 
         let sender2 = sender.clone();
-        RUNTIME.spawn(async move {
+        spawn(async move {
           loop {
             time::sleep(Duration::from_millis(20)).await;
             match sender2.send(QueueItem::Yield) {
@@ -476,7 +499,7 @@ impl AsyncQueue {
         });
         self.task_sender.send(QueueItem::Task(job)).ok().unwrap();
 
-        RUNTIME.spawn(async move {
+        spawn(async move {
             receiver.recv().await.unwrap()
         })
     }

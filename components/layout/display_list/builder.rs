@@ -31,7 +31,6 @@ use crate::fragment::{CanvasFragmentSource, CoordinateSystem, Fragment, ScannedT
 use crate::inline::InlineFragmentNodeFlags;
 use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
-use canvas::canvas_session;
 use canvas::canvas_session::*;
 use app_units::{Au, AU_PER_PX};
 use embedder_traits::Cursor;
@@ -1912,18 +1911,18 @@ impl Fragment {
                         Some((ref session, ref queue)) => {
                             info!("builder.rs build_fragment_type_specific_display_items");
                             let session = session.clone();
-                            let res = canvas_session::RUNTIME.block_on(async move {
+                            let res = block_on(async move {
                                 queue.enqueue_task(move || async move {
-                                    run_session_with_result(
-                                        acquire_shared_session!(session, chan =>
+                                    async_acquire_shared_session_with_result(
+                                        session, move | chan | async move {
                                             choose!(chan, FromLayout,
                                                 receive_value_from! (chan, data =>
                                                     release_shared_session(chan,
                                                         send_value ( data,
-                                                            terminate()))))))
-                                    .await
-                                }).await
-                            }).unwrap();
+                                                            terminate()))))
+                                        })
+                                }).await.unwrap().await.unwrap()
+                            });
                             info!("build_fragment_type_specific_display_items done");
                             match res {
                                 Some(data) => data.image_key,
