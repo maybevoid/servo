@@ -292,11 +292,9 @@ impl LayoutThreadFactory for LayoutThread {
             .name(format!("LayoutThread {:?}", id))
             .spawn(move || {
                 let runtime = runtime::Builder::new_multi_thread()
-                .worker_threads(16)
-                .max_blocking_threads(1024)
-                .enable_time()
-                .build()
-                .unwrap();
+                    .enable_time()
+                    .build()
+                    .unwrap();
 
                 let _guard = runtime.enter();
 

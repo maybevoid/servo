@@ -366,8 +366,6 @@ pub async fn draw_image_in_other(
 lazy_static! {
   pub static ref RUNTIME : runtime::Runtime =
     runtime::Builder::new_multi_thread()
-      .worker_threads(16)
-      .max_blocking_threads(1024)
       .enable_time()
       .build()
       .unwrap();

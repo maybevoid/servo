@@ -162,8 +162,6 @@ pub async fn main() {
     let user_agent = opts_matches.opt_str("u");
 
     let runtime = runtime::Builder::new_multi_thread()
-      .worker_threads(16)
-      .max_blocking_threads(1024)
       .enable_time()
       .build()
       .unwrap();
