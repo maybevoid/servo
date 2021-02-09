@@ -3147,6 +3147,7 @@ dependencies = [
  "style",
  "style_traits",
  "time",
+ "tokio 1.2.0",
  "webrender_api",
 ]
 

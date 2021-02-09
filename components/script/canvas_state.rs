@@ -328,7 +328,7 @@ impl CanvasState {
 
         let session = self.session.clone();
 
-        let data = block_on(async move {
+        let data = block_on(
             async_acquire_shared_session_with_result ( session,
                 move | chan | async move {
                     choose! ( chan, GetImageData,
@@ -338,8 +338,7 @@ impl CanvasState {
                                     send_value ( data,
                                         terminate! ()
                                     )))))
-            }).await.unwrap()
-        });
+            })).unwrap();
 
         let mut pixels = (&data).to_vec();
 
@@ -1486,18 +1485,16 @@ impl CanvasState {
 
         debug!("[is_point_in_path] acquiring shared session");
         let session = self.session.clone();
-        let res = block_on(async move {
+        let res = block_on(
             async_acquire_shared_session_with_result ( session,
                 move | chan | async move {
                     choose! ( chan, IsPointInPath,
                         send_value_to! ( chan, (x, y, fill_rule),
-                            receive_value_from! ( chan, result => {
+                            receive_value_from! ( chan, result =>
                                 release_shared_session ( chan,
                                     send_value! ( result,
-                                        terminate () ) )
-                            }) ) )
-                }).await.unwrap()
-        });
+                                        terminate () ) ))))
+                })).unwrap();
 
         debug!("[is_point_in_path] released shared session");
         res
@@ -1567,7 +1564,7 @@ impl CanvasState {
     pub fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
         debug!("[get_transform] acquiring shared session");
         let session = self.session.clone();
-        let transform = block_on(async move {
+        let transform = block_on(
             async_acquire_shared_session_with_result ( session,
                 move | chan | async move {
                     choose! ( chan, GetTransform,
@@ -1576,8 +1573,7 @@ impl CanvasState {
                                 send_value! ( transform,
                                     terminate () ))
                         } ))
-            }).await.unwrap()
-        });
+                })).unwrap();
         debug!("[get_transform] released shared session");
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())

@@ -122,6 +122,7 @@ use style::traversal_flags::TraversalFlags;
 use style_traits::CSSPixel;
 use style_traits::DevicePixel;
 use style_traits::SpeculativePainter;
+use tokio::runtime;
 
 /// Information needed by the layout thread.
 pub struct LayoutThread {
@@ -290,6 +291,15 @@ impl LayoutThreadFactory for LayoutThread {
         thread::Builder::new()
             .name(format!("LayoutThread {:?}", id))
             .spawn(move || {
+                let runtime = runtime::Builder::new_multi_thread()
+                .worker_threads(16)
+                .max_blocking_threads(1024)
+                .enable_time()
+                .build()
+                .unwrap();
+
+                let _guard = runtime.enter();
+
                 thread_state::initialize(ThreadState::LAYOUT);
 
                 // In order to get accurate crash reports, we install the top-level bc id.

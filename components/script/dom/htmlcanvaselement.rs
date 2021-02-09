@@ -300,7 +300,7 @@ impl HTMLCanvasElement {
             Some(&CanvasContext::Context2d(ref context)) => {
                 let session = context.get_canvas_session().clone();
 
-                let res = block_on(async move {
+                let res = block_on(
                     async_acquire_shared_session_with_result (session,
                         move | chan | async move {
                             choose!(chan, FromScript,
@@ -308,8 +308,7 @@ impl HTMLCanvasElement {
                                     release_shared_session(chan,
                                         send_value( data,
                                             terminate()))))
-                    }).await.unwrap()
-                });
+                    })).unwrap();
 
                 Some(res)
             },

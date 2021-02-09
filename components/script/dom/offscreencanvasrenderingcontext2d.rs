@@ -30,7 +30,6 @@ use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 use ferrite_session::*;
-use std::future::Future;
 
 #[dom_struct]
 pub struct OffscreenCanvasRenderingContext2D {

@@ -1911,7 +1911,7 @@ impl Fragment {
                         Some(ref session) => {
                             info!("builder.rs build_fragment_type_specific_display_items");
                             let session = session.clone();
-                            let res = block_on(async move {
+                            let res = block_on(
                                 async_acquire_shared_session_with_result(
                                     session, move | chan | async move {
                                         choose!(chan, FromLayout,
@@ -1919,8 +1919,7 @@ impl Fragment {
                                                 release_shared_session(chan,
                                                     send_value ( data,
                                                         terminate()))))
-                                }).await.unwrap()
-                            });
+                                })).unwrap();
                             info!("build_fragment_type_specific_display_items done");
                             match res {
                                 Some(data) => data.image_key,
