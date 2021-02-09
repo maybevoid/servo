@@ -323,48 +323,46 @@ pub fn create_canvas_session(
     channel
 }
 
-// pub async fn draw_image_in_other(
-//     source: SharedChannel<CanvasSession>,
-//     target: SharedChannel<CanvasSession>,
-//     image_size: Size2D<f64>,
-//     dest_rect: Rect<f64>,
-//     source_rect: Rect<f64>,
-//     smoothing: bool,
-// ) {
-//     debug!("[draw_image_in_other] acquiring shared session");
+pub async fn draw_image_in_other(
+    source: SharedChannel<CanvasSession>,
+    target: SharedChannel<CanvasSession>,
+    image_size: Size2D<f64>,
+    dest_rect: Rect<f64>,
+    source_rect: Rect<f64>,
+    smoothing: bool,
+) {
+    debug!("[draw_image_in_other] acquiring shared session");
 
-//     run_session(acquire_shared_session!(source, source_chan =>
-//     choose!(
-//         source_chan,
-//         GetImageData,
-//         send_value_to!(
-//             source_chan,
-//             (source_rect.to_u64(), image_size.to_u64()),
-//             receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
-//                 release_shared_session(
-//                     source_chan,
-//                     acquire_shared_session!(target, target_chan =>
-//                         choose!(
-//                             target_chan,
-//                             Message,
-//                             send_value_to!(
-//                                 target_chan,
-//                                 CanvasMessage::DrawImage(
-//                                     Some(ByteBuf::from(image.to_vec())),
-//                                     source_rect.size,
-//                                     dest_rect,
-//                                     source_rect,
-//                                     smoothing
-//                                 ),
-//                                 release_shared_session(target_chan, terminate())
-//                             ))))
-//             }))
-//                         )
-//                         ))
-//     .await;
+    run_session(acquire_shared_session!(source, source_chan =>
+    choose!(
+        source_chan,
+        GetImageData,
+        send_value_to!(
+            source_chan,
+            (source_rect.to_u64(), image_size.to_u64()),
+            receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
+                release_shared_session(
+                    source_chan,
+                    acquire_shared_session!(target, target_chan =>
+                        choose!(
+                            target_chan,
+                            Message,
+                            send_value_to!(
+                                target_chan,
+                                CanvasMessage::DrawImage(
+                                    Some(ByteBuf::from(image.to_vec())),
+                                    source_rect.size,
+                                    dest_rect,
+                                    source_rect,
+                                    smoothing
+                                ),
+                                release_shared_session(target_chan, terminate())
+                            ))))
+            })))))
+    .await;
 
-//     debug!("released shared session");
-// }
+    debug!("released shared session");
+}
 
 lazy_static! {
   pub static ref RUNTIME : runtime::Runtime =
