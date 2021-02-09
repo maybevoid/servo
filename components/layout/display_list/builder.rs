@@ -31,6 +31,7 @@ use crate::fragment::{CanvasFragmentSource, CoordinateSystem, Fragment, ScannedT
 use crate::inline::InlineFragmentNodeFlags;
 use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
+use canvas::canvas_session;
 use canvas::canvas_session::*;
 use app_units::{Au, AU_PER_PX};
 use embedder_traits::Cursor;
@@ -43,7 +44,6 @@ use fnv::FnvHashMap;
 use gfx::text::glyph::ByteIndex;
 use gfx::text::TextRun;
 use gfx_traits::{combine_id_with_fragment_type, FragmentType, StackingContextId};
-use ipc_channel::ipc;
 use log::info;
 use msg::constellation_msg::PipelineId;
 use net_traits::image_cache::UsePlaceholder;
@@ -1912,21 +1912,23 @@ impl Fragment {
                         Some((ref session, ref queue)) => {
                             info!("builder.rs build_fragment_type_specific_display_items");
                             let session = session.clone();
-                            let (sender, receiver) = ipc::channel().unwrap();
-                            queue.enqueue_task(move || async move {
-                                debug!("acquiring shared session");
-                                run_session(
-                                    acquire_shared_session!(session, chan =>
-                                        choose!(chan, FromLayout,
-                                            send_value_to!(chan, sender,
-                                                release_shared_session(chan,
-                                                        terminate())))))
-                                .await;
-                                debug!("released shared session");
-                            });
-                            let res = receiver.recv().unwrap().image_key;
+                            let res = canvas_session::RUNTIME.block_on(async move {
+                                queue.enqueue_task(move || async move {
+                                    run_session_with_result(
+                                        acquire_shared_session!(session, chan =>
+                                            choose!(chan, FromLayout,
+                                                receive_value_from! (chan, data =>
+                                                    release_shared_session(chan,
+                                                        send_value ( data,
+                                                            terminate()))))))
+                                    .await
+                                }).await
+                            }).unwrap();
                             info!("build_fragment_type_specific_display_items done");
-                            res
+                            match res {
+                                Some(data) => data.image_key,
+                                None => return,
+                            }
                         },
                         None => return,
                     },

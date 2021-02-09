@@ -47,7 +47,6 @@ use js::rust::Runtime;
 use msg::constellation_msg::PipelineId;
 use net_traits::image_cache::ImageCache;
 use pixels::PixelFormat;
-use profile_traits::ipc;
 use script_traits::Painter;
 use script_traits::{DrawAPaintImageResult, PaintWorkletError};
 use servo_atoms::Atom;
@@ -364,13 +363,8 @@ impl PaintWorkletGlobalScope {
             return self.invalid_image(size_in_dpx, missing_image_urls);
         }
 
-        let (sender, receiver) = ipc::channel(self.global().time_profiler_chan().clone())
-            .expect("IPC channel creation.");
-        rendering_context.send_data(sender);
-        let image_key = match receiver.recv() {
-            Ok(data) => Some(data.image_key),
-            _ => None,
-        };
+        let image_key = rendering_context.get_data()
+            .map(|data| { data.image_key });
 
         DrawAPaintImageResult {
             width: size_in_dpx.width,

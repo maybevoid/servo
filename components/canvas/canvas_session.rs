@@ -80,8 +80,8 @@ define_choice! { CanvasOps;
       Z
     >
   >,
-  FromLayout: ReceiveValue <
-    ipc::IpcSender<CanvasImageData>,
+  FromLayout: SendValue <
+    Option<CanvasImageData>,
     Z
   >,
   FromScript: ReceiveValue <
@@ -257,13 +257,10 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
       },
       FromLayout => {
         info!("FromLayout");
-        receive_value!(sender => {
-          canvas.send_data(sender);
-
+        send_value ( canvas.get_data(),
           detach_shared_session (
             canvas_session ( canvas )
-          )
-        })
+          ))
       },
       FromScript => {
         info!("FromScript");
