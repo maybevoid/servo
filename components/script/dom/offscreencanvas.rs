@@ -107,16 +107,14 @@ impl OffscreenCanvas {
                 let session = context.get_canvas_session().clone();
 
                 let res = block_on(async move {
-                    context.enqueue_task(move || async move {
-                        async_acquire_shared_session_with_result(session,
-                            move | chan | async move {
-                                choose!(chan, FromScript,
-                                    receive_value_from!(chan, data =>
-                                        release_shared_session(chan,
-                                            send_value( data,
-                                                terminate()))))
-                        })
-                    }).await.unwrap().await.unwrap()
+                    async_acquire_shared_session_with_result(session,
+                        move | chan | async move {
+                            choose!(chan, FromScript,
+                                receive_value_from!(chan, data =>
+                                    release_shared_session(chan,
+                                        send_value( data,
+                                            terminate()))))
+                    }).await.unwrap()
                 });
 
                 Some(res)

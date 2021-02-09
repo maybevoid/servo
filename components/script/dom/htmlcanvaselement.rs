@@ -134,10 +134,8 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
         let source = unsafe {
             match self.unsafe_get().context.borrow_for_layout().as_ref() {
                 Some(&CanvasContext::Context2d(ref context)) => {
-                    HTMLCanvasDataSource::Image(Some((
-                        context.to_layout().get_canvas_session(),
-                        context.to_layout().get_task_queue(),
-                    )))
+                    HTMLCanvasDataSource::Image(Some(
+                        context.to_layout().get_canvas_session()))
                 },
                 Some(&CanvasContext::WebGL(ref context)) => {
                     context.to_layout().canvas_data_source()
@@ -303,16 +301,14 @@ impl HTMLCanvasElement {
                 let session = context.get_canvas_session().clone();
 
                 let res = block_on(async move {
-                    context.enqueue_task(move || async move {
-                        async_acquire_shared_session_with_result (session,
-                            move | chan | async move {
-                                choose!(chan, FromScript,
-                                    receive_value_from!(chan, data =>
-                                        release_shared_session(chan,
-                                            send_value( data,
-                                                terminate()))))
-                            })
-                    }).await.unwrap().await.unwrap()
+                    async_acquire_shared_session_with_result (session,
+                        move | chan | async move {
+                            choose!(chan, FromScript,
+                                receive_value_from!(chan, data =>
+                                    release_shared_session(chan,
+                                        send_value( data,
+                                            terminate()))))
+                    }).await.unwrap()
                 });
 
                 Some(res)

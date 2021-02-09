@@ -51,14 +51,12 @@ use serde_bytes::ByteBuf;
 use servo_url::{ImmutableOrigin, ServoUrl};
 use std::cell::Cell;
 use std::fmt;
-use std::future::Future;
 use std::str::FromStr;
 use std::sync::Arc;
 use style::properties::longhands::font_variant_caps::computed_value::T as FontVariantCaps;
 use style::properties::style_structs::Font;
 use style::values::computed::font::FontStyle;
 use style_traits::values::ToCss;
-use tokio::task;
 use ferrite_session::*;
 
 #[unrooted_must_root_lint::must_root]
@@ -137,7 +135,6 @@ pub(crate) struct CanvasState {
     #[ignore_malloc_size_of = "Channels are hard"]
     session: SharedChannel<CanvasSession>,
     #[ignore_malloc_size_of = "Channels are hard"]
-    queue: AsyncQueue,
     state: DomRefCell<CanvasContextState>,
     origin_clean: Cell<bool>,
     #[ignore_malloc_size_of = "Arc"]
@@ -175,7 +172,6 @@ impl CanvasState {
 
         CanvasState {
             session: session.clone(),
-            queue: AsyncQueue::new(session),
             state: DomRefCell::new(CanvasContextState::new()),
             origin_clean: Cell::new(true),
             image_cache: global.image_cache(),
@@ -190,29 +186,13 @@ impl CanvasState {
         self.session.clone()
     }
 
-    pub fn get_task_queue(&self) -> AsyncQueue {
-        self.queue.clone()
-    }
-
-    pub fn enqueue_task <T, Fut> (
-        &self,
-        task: impl FnOnce() -> Fut
-             + Send + 'static
-    ) -> task::JoinHandle< T >
-    where
-        T: Send + 'static,
-        Fut: Future< Output=T > + Send + 'static
-    {
-        self.queue.enqueue_task(task)
-    }
-
     pub fn get_missing_image_urls(&self) -> &DomRefCell<Vec<ServoUrl>> {
         &self.missing_image_urls
     }
 
     pub fn send_canvas_message(&self, message: CanvasMessage) {
         info!("send_canvas_message {:?}", message);
-        self.queue.send_canvas_message(message);
+        send_canvas_message(self.session.clone(), message);
     }
 
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
@@ -349,18 +329,16 @@ impl CanvasState {
         let session = self.session.clone();
 
         let data = block_on(async move {
-            self.enqueue_task(move || async move {
-                async_acquire_shared_session_with_result ( session,
-                    move | chan | async move {
-                        choose! ( chan, GetImageData,
-                            send_value_to! ( chan, (rect, canvas_size),
-                                receive_value_from!( chan, data =>
-                                    release_shared_session ( chan,
-                                        send_value ( data,
-                                            terminate! ()
-                                        )))))
-                    })
-            }).await.unwrap().await.unwrap()
+            async_acquire_shared_session_with_result ( session,
+                move | chan | async move {
+                    choose! ( chan, GetImageData,
+                        send_value_to! ( chan, (rect, canvas_size),
+                            receive_value_from!( chan, data =>
+                                release_shared_session ( chan,
+                                    send_value ( data,
+                                        terminate! ()
+                                    )))))
+            }).await.unwrap()
         });
 
         let mut pixels = (&data).to_vec();
@@ -1509,18 +1487,16 @@ impl CanvasState {
         debug!("[is_point_in_path] acquiring shared session");
         let session = self.session.clone();
         let res = block_on(async move {
-            self.enqueue_task(move || async move {
-                async_acquire_shared_session_with_result ( session,
-                    move | chan | async move {
-                        choose! ( chan, IsPointInPath,
-                            send_value_to! ( chan, (x, y, fill_rule),
-                                receive_value_from! ( chan, result => {
-                                    release_shared_session ( chan,
-                                        send_value! ( result,
-                                            terminate () ) )
-                                }) ) )
-                    })
-            }).await.unwrap().await.unwrap()
+            async_acquire_shared_session_with_result ( session,
+                move | chan | async move {
+                    choose! ( chan, IsPointInPath,
+                        send_value_to! ( chan, (x, y, fill_rule),
+                            receive_value_from! ( chan, result => {
+                                release_shared_session ( chan,
+                                    send_value! ( result,
+                                        terminate () ) )
+                            }) ) )
+                }).await.unwrap()
         });
 
         debug!("[is_point_in_path] released shared session");
@@ -1592,17 +1568,15 @@ impl CanvasState {
         debug!("[get_transform] acquiring shared session");
         let session = self.session.clone();
         let transform = block_on(async move {
-            self.enqueue_task(move || async move {
-                async_acquire_shared_session_with_result ( session,
-                    move | chan | async move {
-                        choose! ( chan, GetTransform,
-                            receive_value_from! ( chan, transform => {
-                                release_shared_session ( chan,
-                                    send_value! ( transform,
-                                        terminate () ))
-                            } ))
-                    })
-            }).await.unwrap().await.unwrap()
+            async_acquire_shared_session_with_result ( session,
+                move | chan | async move {
+                    choose! ( chan, GetTransform,
+                        receive_value_from! ( chan, transform => {
+                            release_shared_session ( chan,
+                                send_value! ( transform,
+                                    terminate () ))
+                        } ))
+            }).await.unwrap()
         });
         debug!("[get_transform] released shared session");
 

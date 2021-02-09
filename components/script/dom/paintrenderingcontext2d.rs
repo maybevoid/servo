@@ -58,16 +58,14 @@ impl PaintRenderingContext2D {
         info!("paintrenderingcontext2d.rs send_data");
         let session = self.context.get_canvas_session().clone();
         let res = block_on(async move {
-            self.context.enqueue_task(move || async move {
-                async_acquire_shared_session_with_result(session,
-                    move | chan | async move {
-                        choose!(chan, FromLayout,
-                            receive_value_from!(chan, res =>
-                                release_shared_session(chan,
-                                    send_value ( res,
-                                        terminate()))))
-                })
-            }).await.unwrap().await.unwrap()
+            async_acquire_shared_session_with_result(session,
+                move | chan | async move {
+                    choose!(chan, FromLayout,
+                        receive_value_from!(chan, res =>
+                            release_shared_session(chan,
+                                send_value ( res,
+                                    terminate()))))
+            }).await.unwrap()
         });
 
         info!("send_data done");

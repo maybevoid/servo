@@ -6,10 +6,8 @@ use ipc_channel::ipc::{IpcSharedMemory};
 use serde;
 use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
-use std::pin::Pin;
 use std::future::{Future};
-use std::time::Duration;
-use tokio::{task, time, runtime, sync::mpsc};
+use tokio::{task, runtime};
 use lazy_static::lazy_static;
 use crate::canvas_data::*;
 use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
@@ -397,21 +395,7 @@ pub fn block_on<F: Future>(future: F) -> F::Output
   RUNTIME.block_on(future)
 }
 
-enum QueueItem {
-  Yield,
-  Message( CanvasMessage ),
-  Task ( Pin < Box <
-    dyn Future< Output=() > + Send + 'static
-  > > ),
-}
-
-#[derive(Clone)]
-pub struct AsyncQueue {
-  task_sender:
-    mpsc::UnboundedSender < QueueItem >
-}
-
-fn send_canvas_messages (
+pub fn send_canvas_messages (
   session: SharedChannel < CanvasSession >,
   messages: Vec < CanvasMessage >,
 ) {
@@ -423,84 +407,14 @@ fn send_canvas_messages (
   });
 }
 
-impl AsyncQueue {
-    pub fn new(session: SharedChannel<CanvasSession>)
-      -> AsyncQueue
-    {
-        let (sender, mut receiver) = mpsc::unbounded_channel();
-        let mut messages: Vec<CanvasMessage> = vec![];
-
-        spawn(async move {
-            loop {
-                match receiver.recv().await {
-                    Some(item) => {
-                      match item {
-                        QueueItem::Message(message) => {
-                          messages.push(message);
-                        },
-                        QueueItem::Yield => {
-                          if ! messages.is_empty() {
-                            send_canvas_messages(
-                              session.clone(),
-                              messages.split_off(0)
-                            );
-                          }
-                        },
-                        QueueItem::Task(task) => {
-                          if ! messages.is_empty() {
-                            send_canvas_messages(
-                              session.clone(),
-                              messages.split_off(0)
-                            );
-                          }
-
-                          task.await;
-                        }
-                      }
-                    }
-                    None => break
-                }
-            }
-        });
-
-        let sender2 = sender.clone();
-        spawn(async move {
-          loop {
-            time::sleep(Duration::from_millis(20)).await;
-            match sender2.send(QueueItem::Yield) {
-              Err(_) => break,
-              _ => {}
-            }
-          }
-        });
-
-        AsyncQueue {
-            task_sender: sender
-        }
-    }
-
-    pub fn send_canvas_message (&self, message: CanvasMessage) {
-      self.task_sender.send(QueueItem::Message(message)).ok().unwrap();
-    }
-
-    pub fn enqueue_task <T, Fut> (
-        &self,
-        task: impl FnOnce() -> Fut
-             + Send + 'static
-    ) -> task::JoinHandle< T >
-    where
-        T: Send + 'static,
-        Fut: Future< Output=T > + Send + 'static
-    {
-        let (sender, receiver) = once_channel();
-        let job = Box::pin(async move {
-            let res = task().await;
-            sender.send(res).unwrap();
-        });
-        self.task_sender.send(QueueItem::Task(job)).ok().unwrap();
-
-        spawn(async move {
-            receiver.recv().await.unwrap()
-        })
-    }
+pub fn send_canvas_message (
+  session: SharedChannel < CanvasSession >,
+  message: CanvasMessage,
+) {
+  async_acquire_shared_session ( session, move | chan | async move {
+      choose! ( chan, Message,
+          send_value_to! ( chan, message,
+              release_shared_session (chan,
+                  terminate! () ) ) )
+  });
 }

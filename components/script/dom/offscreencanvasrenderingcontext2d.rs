@@ -72,24 +72,6 @@ impl OffscreenCanvasRenderingContext2D {
         self.canvas_state.get_canvas_session()
     }
 
-    pub fn get_task_queue(&self) -> AsyncQueue {
-        self.canvas_state.get_task_queue()
-    }
-
-    pub fn enqueue_task <T, Fut> (
-        &self,
-        task: impl FnOnce() -> Fut
-             + Send + 'static
-    ) -> impl Future <
-        Output=Result<T, tokio::task::JoinError>
-        > + Send + 'static
-    where
-        T: Send + 'static,
-        Fut: Future< Output=T > + Send + 'static
-    {
-        self.canvas_state.enqueue_task(task)
-    }
-
     pub fn set_canvas_bitmap_dimensions(&self, size: Size2D<u64>) {
         self.canvas_state.set_bitmap_dimensions(size);
     }

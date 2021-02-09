@@ -1908,20 +1908,18 @@ impl Fragment {
                     CanvasFragmentSource::WebGL(image_key) => image_key,
                     CanvasFragmentSource::WebGPU(image_key) => image_key,
                     CanvasFragmentSource::Image(ref ctx) => match *ctx {
-                        Some((ref session, ref queue)) => {
+                        Some(ref session) => {
                             info!("builder.rs build_fragment_type_specific_display_items");
                             let session = session.clone();
                             let res = block_on(async move {
-                                queue.enqueue_task(move || async move {
-                                    async_acquire_shared_session_with_result(
-                                        session, move | chan | async move {
-                                            choose!(chan, FromLayout,
-                                                receive_value_from! (chan, data =>
-                                                    release_shared_session(chan,
-                                                        send_value ( data,
-                                                            terminate()))))
-                                        })
-                                }).await.unwrap().await.unwrap()
+                                async_acquire_shared_session_with_result(
+                                    session, move | chan | async move {
+                                        choose!(chan, FromLayout,
+                                            receive_value_from! (chan, data =>
+                                                release_shared_session(chan,
+                                                    send_value ( data,
+                                                        terminate()))))
+                                }).await.unwrap()
                             });
                             info!("build_fragment_type_specific_display_items done");
                             match res {
