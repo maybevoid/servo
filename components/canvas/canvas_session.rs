@@ -8,8 +8,9 @@ use serde_bytes::ByteBuf;
 use style::properties::style_structs::Font as FontStyleStruct;
 use std::future::{Future};
 use std::sync::{Arc, Mutex};
-use tokio::{task, runtime};
-use lazy_static::lazy_static;
+use tokio::{task, time, runtime};
+use std::time::Duration;
+use log::info;
 use crate::canvas_data::*;
 use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
 use canvas_traits::canvas::*;
@@ -92,10 +93,10 @@ define_choice! { CanvasOps;
   >,
 }
 
-pub type CanvasSession = LinearToShared<ExternalChoice<CanvasOps>>;
+pub type CanvasProtocol = LinearToShared<ExternalChoice<CanvasOps>>;
 
-pub type CreateCanvasSession =
-    LinearToShared<ReceiveValue<(Size2D<u64>, bool), SendValue<SharedChannel<CanvasSession>, Z>>>;
+pub type CreateCanvasProtocol =
+    LinearToShared<ReceiveValue<(Size2D<u64>, bool), SendValue<SharedChannel<CanvasProtocol>, Z>>>;
 
 fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessage) {
   info!("handling CanvasMessage {:?}", message);
@@ -203,7 +204,7 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
   info!("done handling CanvasMessage");
 }
 
-pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSession> {
+fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtocol> {
     accept_shared_session(offer_choice! {
       Message => {
         receive_value! ( message => {
@@ -275,12 +276,12 @@ pub fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasSe
     })
 }
 
-pub struct CanvasContext {
+struct CanvasContext {
     webrender_api: Box<dyn WebrenderApi>,
     font_cache_thread: FontCacheThread,
 }
 
-pub fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasSession> {
+fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasProtocol> {
     accept_shared_session(receive_value!( param => {
       let (size, antialias) = param;
 
@@ -311,7 +312,7 @@ pub fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanv
 pub fn create_canvas_session(
     webrender_api: Box<dyn WebrenderApi>,
     font_cache_thread: FontCacheThread,
-) -> SharedChannel<CreateCanvasSession> {
+) -> SharedChannel<CreateCanvasProtocol> {
     let ctx = CanvasContext {
         webrender_api: webrender_api,
         font_cache_thread: font_cache_thread,
@@ -322,89 +323,67 @@ pub fn create_canvas_session(
     channel
 }
 
-pub async fn draw_image_in_other(
-    source: SharedChannel<CanvasSession>,
-    target: SharedChannel<CanvasSession>,
-    image_size: Size2D<f64>,
-    dest_rect: Rect<f64>,
-    source_rect: Rect<f64>,
-    smoothing: bool,
-) {
-    debug!("[draw_image_in_other] acquiring shared session");
-
-    run_session(acquire_shared_session!(source, source_chan =>
-    choose!(
-        source_chan,
-        GetImageData,
-        send_value_to!(
-            source_chan,
-            (source_rect.to_u64(), image_size.to_u64()),
-            receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
-                release_shared_session(
-                    source_chan,
-                    acquire_shared_session!(target, target_chan =>
-                        choose!(
-                            target_chan,
-                            Message,
-                            send_value_to!(
-                                target_chan,
-                                CanvasMessage::DrawImage(
-                                    Some(ByteBuf::from(image.to_vec())),
-                                    source_rect.size,
-                                    dest_rect,
-                                    source_rect,
-                                    smoothing
-                                ),
-                                release_shared_session(target_chan, terminate())
-                            ))))
-            })))))
-    .await;
-
-    debug!("released shared session");
-}
-
-lazy_static! {
-  pub static ref RUNTIME : runtime::Runtime =
-    runtime::Builder::new_multi_thread()
-      .enable_time()
-      .build()
-      .unwrap();
-}
-
-pub fn spawn<T>(task: T) ->
-  task::JoinHandle<T::Output>
-where
-  T: Future + Send + 'static,
-  T::Output: Send + 'static,
-{
-  task::spawn(task)
-}
-
-pub fn spawn_blocking<F, R>(f: F) ->
-  task::JoinHandle<R>
-where
-  F: FnOnce() -> R + Send + 'static,
-  R: Send + 'static,
-{
-  task::spawn_blocking(f)
-}
-
-pub fn block_on<F: Future>(future: F) -> F::Output
-{
-  RUNTIME.block_on(future)
-}
-
 #[derive(Clone)]
-pub struct MessageBuffer ( pub Arc < Mutex < Vec < CanvasMessage > > > );
+pub struct CanvasSession {
+  runtime: Arc < runtime::Runtime >,
+  message_buffer: Arc < Mutex < Vec < CanvasMessage > > >,
+  shared_channel: SharedChannel < CanvasProtocol >,
+}
 
-impl MessageBuffer {
-  pub fn new() -> MessageBuffer {
-    MessageBuffer(Arc::new(Mutex::new(vec![])))
+impl CanvasSession {
+  pub fn new(shared_channel: SharedChannel<CanvasProtocol>)
+    -> CanvasSession
+  {
+    CanvasSession {
+      shared_channel,
+      message_buffer: Arc::new(Mutex::new(vec![])),
+      runtime: Arc::new(
+        runtime::Builder::new_multi_thread()
+          .enable_time()
+          .build()
+          .unwrap()),
+    }
+  }
+
+  pub fn flush_messages (&self)
+  {
+      let mut messages = self.message_buffer.lock().unwrap();
+      if ! messages.is_empty() {
+          info!("flushing {} messages", messages.len());
+          let messages2 = messages.split_off(0);
+          send_canvas_messages(self.shared_channel.clone(), messages2);
+      }
+  }
+
+  pub fn send_canvas_message(&self, message: CanvasMessage)
+  {
+      let mut messages = self.message_buffer.lock().unwrap();
+      let was_empty = messages.is_empty();
+      messages.push(message);
+
+      if was_empty {
+          let cloned = self.clone();
+          task::spawn(async move {
+              time::sleep(Duration::from_millis(10)).await;
+              cloned.flush_messages();
+          });
+      }
+  }
+
+  pub fn get_shared_channel(&self) -> SharedChannel<CanvasProtocol>
+  {
+    self.flush_messages();
+    self.shared_channel.clone()
+  }
+
+  pub fn block_on<F: Future>(&self, future: F) -> F::Output
+  {
+    self.runtime.block_on(future)
   }
 }
 
-pub fn send_canvas_messages (
-  session: SharedChannel < CanvasSession >,
+fn send_canvas_messages (
+  session: SharedChannel < CanvasProtocol >,
   messages: Vec < CanvasMessage >,
 ) {
   async_acquire_shared_session ( session, move | chan | async move {
@@ -415,25 +394,39 @@ pub fn send_canvas_messages (
   });
 }
 
-pub fn flush_messages (
-  session: SharedChannel < CanvasSession >,
-  messages: &MessageBuffer
+pub async fn draw_image_in_other(
+    source: SharedChannel<CanvasProtocol>,
+    target: SharedChannel<CanvasProtocol>,
+    image_size: Size2D<f64>,
+    dest_rect: Rect<f64>,
+    source_rect: Rect<f64>,
+    smoothing: bool,
 ) {
-    let mut messages = messages.0.lock().unwrap();
-    if ! messages.is_empty() {
-        let messages2 = messages.split_off(0);
-        send_canvas_messages(session, messages2);
-    }
-}
-
-pub fn send_canvas_message (
-  session: SharedChannel < CanvasSession >,
-  message: CanvasMessage,
-) {
-  async_acquire_shared_session ( session, move | chan | async move {
-      choose! ( chan, Message,
-          send_value_to! ( chan, message,
-              release_shared_session (chan,
-                  terminate! () ) ) )
-  });
+    run_session(acquire_shared_session!(source, source_chan =>
+      choose!(
+          source_chan,
+          GetImageData,
+          send_value_to!(
+              source_chan,
+              (source_rect.to_u64(), image_size.to_u64()),
+              receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
+                  release_shared_session(
+                      source_chan,
+                      acquire_shared_session!(target, target_chan =>
+                          choose!(
+                              target_chan,
+                              Message,
+                              send_value_to!(
+                                  target_chan,
+                                  CanvasMessage::DrawImage(
+                                      Some(ByteBuf::from(image.to_vec())),
+                                      source_rect.size,
+                                      dest_rect,
+                                      source_rect,
+                                      smoothing
+                                  ),
+                                  release_shared_session(target_chan, terminate())
+                              ))))
+              })))))
+      .await;
 }

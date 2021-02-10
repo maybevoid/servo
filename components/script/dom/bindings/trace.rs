@@ -46,7 +46,7 @@ use crate::script_runtime::{ContextForRequestInterrupt, StreamConsumer};
 use crate::script_thread::IncompleteParserContexts;
 use crate::task::TaskBox;
 use app_units::Au;
-use canvas::canvas_session::MessageBuffer;
+use canvas::canvas_session::CanvasSession;
 use canvas_traits::canvas::{
     CanvasGradientStop, CanvasId, LinearGradientStyle, RadialGradientStyle,
 };
@@ -933,7 +933,7 @@ unsafe impl JSTraceable for StyleLocked<MediaList> {
     }
 }
 
-unsafe impl JSTraceable for MessageBuffer {
+unsafe impl JSTraceable for CanvasSession {
     unsafe fn trace(&self, _trc: *mut JSTracer) {
         // Do nothing.
     }

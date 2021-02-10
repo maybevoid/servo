@@ -19,7 +19,6 @@ pub mod wrapper_traits;
 
 use atomic_refcell::AtomicRefCell;
 use canvas::canvas_session::*;
-use ferrite_session::*;
 use libc::c_void;
 use net_traits::image_cache::PendingImageId;
 use script_traits::UntrustedNodeAddress;
@@ -122,7 +121,7 @@ pub enum LayoutElementType {
 
 pub enum HTMLCanvasDataSource {
     WebGL(webrender_api::ImageKey),
-    Image(Option<( SharedChannel<CanvasSession>, MessageBuffer )>),
+    Image(Option< CanvasSession >),
     WebGPU(webrender_api::ImageKey),
 }
 

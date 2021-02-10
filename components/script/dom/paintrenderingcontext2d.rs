@@ -56,10 +56,10 @@ impl PaintRenderingContext2D {
 
     pub fn get_data(&self) -> Option<CanvasImageData> {
         info!("paintrenderingcontext2d.rs send_data");
-        flush_messages(self.context.get_canvas_session(), &self.context.get_message_buffer());
-        let session = self.context.get_canvas_session().clone();
-        let res = block_on(
-            async_acquire_shared_session_with_result(session,
+        let session = self.context.get_canvas_session();
+        let shared = session.get_shared_channel();
+        let res = session.block_on(
+            async_acquire_shared_session_with_result(shared,
                 move | chan | async move {
                     choose!(chan, FromLayout,
                         receive_value_from!(chan, res =>

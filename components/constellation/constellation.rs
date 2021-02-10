@@ -104,7 +104,7 @@ use crate::timer_scheduler::TimerScheduler;
 use background_hang_monitor::HangMonitorRegister;
 use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
-use canvas::canvas_session::{self, CanvasSession, CreateCanvasSession, block_on};
+use canvas::canvas_session::{CanvasProtocol, CreateCanvasProtocol};
 use canvas_traits::webgl::WebGLThreads;
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;
@@ -181,6 +181,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use style_traits::viewport::ViewportConstraints;
 use style_traits::CSSPixel;
+use tokio::runtime;
 use webgpu::{self, WebGPU, WebGPURequest};
 use webrender_traits::WebrenderExternalImageRegistry;
 
@@ -478,7 +479,8 @@ pub struct Constellation<Message, LTF, STF, SWF> {
     /// The XR device registry
     webxr_registry: webxr_api::Registry,
 
-    canvas_session: SharedChannel<CreateCanvasSession>,
+    runtime: Arc<runtime::Runtime>,
+    canvas_session: SharedChannel<CreateCanvasProtocol>,
 
     /// Navigation requests from script awaiting approval from the embedder.
     pending_approval_navigations: PendingApprovalNavigations,
@@ -752,7 +754,7 @@ where
         is_running_problem_test: bool,
         hard_fail: bool,
         enable_canvas_antialiasing: bool,
-        canvas_session: SharedChannel<CreateCanvasSession>,
+        canvas_session: SharedChannel<CreateCanvasProtocol>,
     ) -> Sender<FromCompositorMsg> {
         let (compositor_sender, compositor_receiver) = unbounded();
 
@@ -846,6 +848,12 @@ where
                     wgpu_image_map: state.wgpu_image_map,
                 };
 
+                let runtime = Arc::new(
+                        runtime::Builder::new_multi_thread()
+                            .enable_time()
+                            .build()
+                            .unwrap());
+
                 let mut constellation: Constellation<Message, LTF, STF, SWF> = Constellation {
                     namespace_receiver,
                     namespace_sender,
@@ -912,6 +920,7 @@ where
                     }),
                     webgl_threads: state.webgl_threads,
                     webxr_registry: state.webxr_registry,
+                    runtime: runtime.clone(),
                     canvas_session,
                     pending_approval_navigations: HashMap::new(),
                     pressed_mouse_buttons: 0,
@@ -925,7 +934,8 @@ where
                     user_agent: state.user_agent,
                 };
 
-                let _guard = canvas_session::RUNTIME.enter();
+                let _guard = runtime.enter();
+
                 constellation.run();
             })
             .expect("Thread spawning failed");
@@ -1821,11 +1831,13 @@ where
                     warn!("Error replying to remove iframe ({})", e);
                 }
             },
-            FromScriptMsg::CreateCanvasPaintThread(size, sender) =>
-                block_on(async move {
+            FromScriptMsg::CreateCanvasPaintThread(size, sender) => {
+                let runtime = self.runtime.clone();
+                runtime.block_on(async move {
                     self.handle_create_canvas_paint_thread_msg(size, sender)
                         .await
-                }),
+                })
+            },
             FromScriptMsg::SetDocumentState(state) => {
                 self.document_states.insert(source_pipeline_id, state);
             },
@@ -4371,7 +4383,7 @@ where
     async fn handle_create_canvas_paint_thread_msg(
         &mut self,
         size: UntypedSize2D<u64>,
-        response_sender: IpcSender<SharedChannel<CanvasSession>>,
+        response_sender: IpcSender<SharedChannel<CanvasProtocol>>,
     ) {
         let antialias = self.enable_canvas_antialiasing;
         let canvas = run_session_with_result(

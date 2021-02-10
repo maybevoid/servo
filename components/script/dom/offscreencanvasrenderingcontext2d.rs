@@ -29,7 +29,6 @@ use crate::dom::textmetrics::TextMetrics;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
-use ferrite_session::*;
 
 #[dom_struct]
 pub struct OffscreenCanvasRenderingContext2D {
@@ -67,12 +66,8 @@ impl OffscreenCanvasRenderingContext2D {
         reflect_dom_object(boxed, global)
     }
 
-    pub fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
+    pub fn get_canvas_session(&self) -> CanvasSession {
         self.canvas_state.get_canvas_session()
-    }
-
-    pub fn get_message_buffer(&self) -> MessageBuffer {
-        self.canvas_state.get_message_buffer()
     }
 
     pub fn set_canvas_bitmap_dimensions(&self, size: Size2D<u64>) {

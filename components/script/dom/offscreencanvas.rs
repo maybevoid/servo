@@ -104,11 +104,11 @@ impl OffscreenCanvas {
 
         let data = match self.context.borrow().as_ref() {
             Some(&OffscreenCanvasContext::OffscreenContext2d(ref context)) => {
-                flush_messages(context.get_canvas_session(), &context.get_message_buffer());
-                let session = context.get_canvas_session().clone();
+                let session = context.get_canvas_session();
+                let shared = session.get_shared_channel();
 
-                let res = block_on(
-                    async_acquire_shared_session_with_result(session,
+                let res = session.block_on(
+                    async_acquire_shared_session_with_result(shared,
                         move | chan | async move {
                             choose!(chan, FromScript,
                                 receive_value_from!(chan, data =>

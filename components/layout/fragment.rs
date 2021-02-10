@@ -23,7 +23,6 @@ use crate::ServoArc;
 use app_units::Au;
 use canvas::canvas_session::*;
 use euclid::default::{Point2D, Rect, Size2D, Vector2D};
-use ferrite_session::*;
 use gfx::text::glyph::ByteIndex;
 use gfx::text::text_run::{TextRun, TextRunSlice};
 use gfx_traits::StackingContextId;
@@ -337,7 +336,7 @@ impl InlineAbsoluteFragmentInfo {
 #[derive(Clone)]
 pub enum CanvasFragmentSource {
     WebGL(webrender_api::ImageKey),
-    Image(Option< (SharedChannel<CanvasSession>, MessageBuffer) >),
+    Image(Option< CanvasSession >),
     WebGPU(webrender_api::ImageKey),
 }
 

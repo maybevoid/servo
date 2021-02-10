@@ -27,7 +27,6 @@ use crate::dom::textmetrics::TextMetrics;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::{Point2D, Rect, Size2D};
-use ferrite_session::*;
 use servo_url::ServoUrl;
 use std::mem;
 
@@ -70,12 +69,8 @@ impl CanvasRenderingContext2D {
         reflect_dom_object(boxed, global)
     }
 
-    pub fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
+    pub fn get_canvas_session(&self) -> CanvasSession {
         self.canvas_state.get_canvas_session()
-    }
-
-    pub fn get_message_buffer(&self) -> MessageBuffer {
-        self.canvas_state.get_message_buffer()
     }
 
     // https://html.spec.whatwg.org/multipage/#concept-canvas-set-bitmap-dimensions
@@ -126,13 +121,8 @@ impl CanvasRenderingContext2D {
 
 impl LayoutDom<'_, CanvasRenderingContext2D> {
 #[allow(unsafe_code)]
-    pub unsafe fn get_canvas_session(&self) -> SharedChannel<CanvasSession> {
+    pub unsafe fn get_canvas_session(&self) -> CanvasSession {
         self.unsafe_get().get_canvas_session()
-    }
-
-    #[allow(unsafe_code)]
-    pub unsafe fn get_message_buffer(&self) -> MessageBuffer {
-        self.unsafe_get().get_message_buffer()
     }
 }
 
