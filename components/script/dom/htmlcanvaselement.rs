@@ -134,8 +134,7 @@ impl LayoutHTMLCanvasElementHelpers for LayoutDom<'_, HTMLCanvasElement> {
         let source = unsafe {
             match self.unsafe_get().context.borrow_for_layout().as_ref() {
                 Some(&CanvasContext::Context2d(ref context)) => {
-                    HTMLCanvasDataSource::Image(Some(
-                        context.to_layout().get_canvas_session()))
+                    HTMLCanvasDataSource::Image(Some(context.to_layout().get_canvas_session()))
                 },
                 Some(&CanvasContext::WebGL(ref context)) => {
                     context.to_layout().canvas_data_source()
@@ -301,15 +300,21 @@ impl HTMLCanvasElement {
                 let session = context.get_canvas_session();
                 let shared = session.get_shared_channel();
 
-                let res = session.block_on(
-                    async_acquire_shared_session_with_result (shared,
-                        move | chan | async move {
-                            choose!(chan, FromScript,
+                let res = session
+                    .block_on(async_acquire_shared_session_with_result(
+                        shared,
+                        move |chan| async move {
+                            choose!(
+                                chan,
+                                FromScript,
                                 receive_value_from!(chan, data =>
                                     release_shared_session(chan,
                                         send_value( data,
-                                            terminate()))))
-                    })).unwrap();
+                                            terminate())))
+                            )
+                        },
+                    ))
+                    .unwrap();
 
                 Some(res)
             },

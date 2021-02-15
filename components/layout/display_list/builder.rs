@@ -31,8 +31,8 @@ use crate::fragment::{CanvasFragmentSource, CoordinateSystem, Fragment, ScannedT
 use crate::inline::InlineFragmentNodeFlags;
 use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
-use canvas::canvas_session::*;
 use app_units::{Au, AU_PER_PX};
+use canvas::canvas_session::*;
 use embedder_traits::Cursor;
 use euclid::{
     default::{Point2D, Rect, SideOffsets2D as UntypedSideOffsets2D, Size2D},
@@ -1911,15 +1911,21 @@ impl Fragment {
                         Some(ref session) => {
                             info!("builder.rs build_fragment_type_specific_display_items");
                             let shared = session.get_shared_channel();
-                            let res = session.block_on(
-                                async_acquire_shared_session_with_result(
-                                    shared, move | chan | async move {
-                                        choose!(chan, FromLayout,
+                            let res = session
+                                .block_on(async_acquire_shared_session_with_result(
+                                    shared,
+                                    move |chan| async move {
+                                        choose!(
+                                            chan,
+                                            FromLayout,
                                             receive_value_from! (chan, data =>
                                                 release_shared_session(chan,
                                                     send_value ( data,
-                                                        terminate()))))
-                                })).unwrap();
+                                                        terminate())))
+                                        )
+                                    },
+                                ))
+                                .unwrap();
                             info!("build_fragment_type_specific_display_items done");
                             match res {
                                 Some(data) => data.image_key,

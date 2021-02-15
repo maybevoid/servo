@@ -20,7 +20,7 @@ use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 use ferrite_session::*;
-use ipc_channel::ipc::{IpcSharedMemory};
+use ipc_channel::ipc::IpcSharedMemory;
 use js::rust::HandleValue;
 use std::cell::Cell;
 
@@ -107,15 +107,21 @@ impl OffscreenCanvas {
                 let session = context.get_canvas_session();
                 let shared = session.get_shared_channel();
 
-                let res = session.block_on(
-                    async_acquire_shared_session_with_result(shared,
-                        move | chan | async move {
-                            choose!(chan, FromScript,
+                let res = session
+                    .block_on(async_acquire_shared_session_with_result(
+                        shared,
+                        move |chan| async move {
+                            choose!(
+                                chan,
+                                FromScript,
                                 receive_value_from!(chan, data =>
                                     release_shared_session(chan,
                                         send_value( data,
-                                            terminate()))))
-                        })).unwrap();
+                                            terminate())))
+                            )
+                        },
+                    ))
+                    .unwrap();
 
                 Some(res)
             },

@@ -349,14 +349,8 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-getimagedata
     fn GetImageData(&self, sx: i32, sy: i32, sw: i32, sh: i32) -> Fallible<DomRoot<ImageData>> {
-        self.canvas_state.get_image_data(
-            self.canvas.get_size(),
-            &self.global(),
-            sx,
-            sy,
-            sw,
-            sh,
-        )
+        self.canvas_state
+            .get_image_data(self.canvas.get_size(), &self.global(), sx, sy, sw, sh)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-putimagedata
@@ -391,12 +385,8 @@ impl OffscreenCanvasRenderingContext2DMethods for OffscreenCanvasRenderingContex
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
     fn DrawImage(&self, image: CanvasImageSource, dx: f64, dy: f64) -> ErrorResult {
-        self.canvas_state.draw_image(
-            self.htmlcanvas.as_ref().map(|c| &**c),
-            image,
-            dx,
-            dy,
-        )
+        self.canvas_state
+            .draw_image(self.htmlcanvas.as_ref().map(|c| &**c), image, dx, dy)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage

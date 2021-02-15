@@ -1447,9 +1447,9 @@ impl ScriptThread {
         debug!("Starting script thread.");
 
         let runtime = runtime::Builder::new_multi_thread()
-          .enable_time()
-          .build()
-          .unwrap();
+            .enable_time()
+            .build()
+            .unwrap();
 
         let _guard = runtime.enter();
 

@@ -849,10 +849,11 @@ where
                 };
 
                 let runtime = Arc::new(
-                        runtime::Builder::new_multi_thread()
-                            .enable_time()
-                            .build()
-                            .unwrap());
+                    runtime::Builder::new_multi_thread()
+                        .enable_time()
+                        .build()
+                        .unwrap(),
+                );
 
                 let mut constellation: Constellation<Message, LTF, STF, SWF> = Constellation {
                     namespace_receiver,
@@ -4386,15 +4387,14 @@ where
         response_sender: IpcSender<SharedChannel<CanvasProtocol>>,
     ) {
         let antialias = self.enable_canvas_antialiasing;
-        let canvas = run_session_with_result(
-            acquire_shared_session!(self.canvas_session, chan =>
-                send_value_to!( chan, (size, antialias),
-                    receive_value_from!(chan, canvas =>
-                        release_shared_session(chan,
-                            send_value!(canvas,
-                                terminate()))
-                    ))))
-            .await;
+        let canvas = run_session_with_result(acquire_shared_session!(self.canvas_session, chan =>
+        send_value_to!( chan, (size, antialias),
+            receive_value_from!(chan, canvas =>
+                release_shared_session(chan,
+                    send_value!(canvas,
+                        terminate()))
+            ))))
+        .await;
 
         debug!("created canvas");
 

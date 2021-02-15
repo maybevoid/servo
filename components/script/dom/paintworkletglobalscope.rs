@@ -363,8 +363,7 @@ impl PaintWorkletGlobalScope {
             return self.invalid_image(size_in_dpx, missing_image_urls);
         }
 
-        let image_key = rendering_context.get_data()
-            .map(|data| { data.image_key });
+        let image_key = rendering_context.get_data().map(|data| data.image_key);
 
         DrawAPaintImageResult {
             width: size_in_dpx.width,

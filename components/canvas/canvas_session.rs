@@ -1,20 +1,20 @@
 use ferrite_session::*;
 
-use cssparser::RGBA;
-use euclid::default::{Point2D, Rect, Size2D, Transform2D};
-use ipc_channel::ipc::{IpcSharedMemory};
-use serde;
-use serde_bytes::ByteBuf;
-use style::properties::style_structs::Font as FontStyleStruct;
-use std::future::{Future};
-use std::sync::{Arc, Mutex};
-use tokio::{task, time, runtime};
-use std::time::Duration;
-use log::info;
 use crate::canvas_data::*;
 use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
 use canvas_traits::canvas::*;
+use cssparser::RGBA;
+use euclid::default::{Point2D, Rect, Size2D, Transform2D};
 use gfx::font_cache_thread::FontCacheThread;
+use ipc_channel::ipc::IpcSharedMemory;
+use log::info;
+use serde;
+use serde_bytes::ByteBuf;
+use std::future::Future;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use style::properties::style_structs::Font as FontStyleStruct;
+use tokio::{runtime, task, time};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum CanvasMessage {
@@ -99,109 +99,89 @@ pub type CreateCanvasProtocol =
     LinearToShared<ReceiveValue<(Size2D<u64>, bool), SendValue<SharedChannel<CanvasProtocol>, Z>>>;
 
 fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessage) {
-  info!("handling CanvasMessage {:?}", message);
-  match message {
-    CanvasMessage::FillText(text, x, y, max_width, style, is_rtl) => {
-      canvas.set_fill_style(style);
-      canvas.fill_text(text, x, y, max_width, is_rtl);
-    },
-    CanvasMessage::FillRect(rect, style) => {
-      canvas.set_fill_style(style);
-      canvas.fill_rect(&rect);
-    },
-    CanvasMessage::StrokeRect(rect, style) => {
-        canvas.set_stroke_style(style);
-        canvas.stroke_rect(&rect);
-    },
-    CanvasMessage::ClearRect(ref rect) => {
-      info!("calling clear_rect");
-      canvas.clear_rect(rect);
-      info!("clear_rect done");
-    },
-    CanvasMessage::BeginPath => canvas.begin_path(),
-    CanvasMessage::ClosePath => canvas.close_path(),
-    CanvasMessage::Fill(style) => {
-        canvas.set_fill_style(style);
-        canvas.fill();
-    },
-    CanvasMessage::Stroke(style) => {
-        canvas.set_stroke_style(style);
-        canvas.stroke();
-    },
-    CanvasMessage::Clip => canvas.clip(),
-    CanvasMessage::DrawImage(
-        imagedata,
-        image_size,
-        dest_rect,
-        source_rect,
-        smoothing_enabled,
-    ) => {
-        let data = imagedata.map_or_else(
-            || vec![0; image_size.width as usize * image_size.height as usize * 4],
-            |bytes| bytes.into_vec(),
-        );
-        canvas.draw_image(
-            data,
+    info!("handling CanvasMessage {:?}", message);
+    match message {
+        CanvasMessage::FillText(text, x, y, max_width, style, is_rtl) => {
+            canvas.set_fill_style(style);
+            canvas.fill_text(text, x, y, max_width, is_rtl);
+        },
+        CanvasMessage::FillRect(rect, style) => {
+            canvas.set_fill_style(style);
+            canvas.fill_rect(&rect);
+        },
+        CanvasMessage::StrokeRect(rect, style) => {
+            canvas.set_stroke_style(style);
+            canvas.stroke_rect(&rect);
+        },
+        CanvasMessage::ClearRect(ref rect) => {
+            info!("calling clear_rect");
+            canvas.clear_rect(rect);
+            info!("clear_rect done");
+        },
+        CanvasMessage::BeginPath => canvas.begin_path(),
+        CanvasMessage::ClosePath => canvas.close_path(),
+        CanvasMessage::Fill(style) => {
+            canvas.set_fill_style(style);
+            canvas.fill();
+        },
+        CanvasMessage::Stroke(style) => {
+            canvas.set_stroke_style(style);
+            canvas.stroke();
+        },
+        CanvasMessage::Clip => canvas.clip(),
+        CanvasMessage::DrawImage(
+            imagedata,
             image_size,
             dest_rect,
             source_rect,
             smoothing_enabled,
-        )
-    },
-    CanvasMessage::MoveTo(ref point) => canvas.move_to(point),
-    CanvasMessage::LineTo(ref point) => canvas.line_to(point),
-    CanvasMessage::Rect(ref rect) => canvas.rect(rect),
-    CanvasMessage::QuadraticCurveTo(ref cp, ref pt) => {
-        canvas.quadratic_curve_to(cp, pt)
-    },
-    CanvasMessage::BezierCurveTo(ref cp1, ref cp2, ref pt) => {
-        canvas.bezier_curve_to(cp1, cp2, pt)
-    },
-    CanvasMessage::Arc(ref center, radius, start, end, ccw) => {
-        canvas.arc(center, radius, start, end, ccw)
-    },
-    CanvasMessage::ArcTo(ref cp1, ref cp2, radius) => {
-        canvas.arc_to(cp1, cp2, radius)
-    },
-    CanvasMessage::Ellipse(ref center, radius_x, radius_y, rotation, start, end, ccw) =>
-      canvas
-        .ellipse(center, radius_x, radius_y, rotation, start, end, ccw),
-    CanvasMessage::RestoreContext => canvas.restore_context_state(),
-    CanvasMessage::SaveContext => canvas.save_context_state(),
-    CanvasMessage::SetLineWidth(width) => canvas.set_line_width(width),
-    CanvasMessage::SetLineCap(cap) => canvas.set_line_cap(cap),
-    CanvasMessage::SetLineJoin(join) => canvas.set_line_join(join),
-    CanvasMessage::SetMiterLimit(limit) => canvas.set_miter_limit(limit),
-    CanvasMessage::SetTransform(ref matrix) => canvas.set_transform(matrix),
-    CanvasMessage::SetGlobalAlpha(alpha) => canvas.set_global_alpha(alpha),
-    CanvasMessage::SetGlobalComposition(op) => {
-        canvas.set_global_composition(op)
-    },
-    CanvasMessage::SetShadowOffsetX(value) => {
-        canvas.set_shadow_offset_x(value)
-    },
-    CanvasMessage::SetShadowOffsetY(value) => {
-        canvas.set_shadow_offset_y(value)
-    },
-    CanvasMessage::SetShadowBlur(value) => canvas.set_shadow_blur(value),
-    CanvasMessage::SetShadowColor(color) => canvas.set_shadow_color(color),
-    CanvasMessage::SetFont(font_style) => canvas.set_font(font_style),
-    CanvasMessage::SetTextAlign(text_align) => {
-        canvas.set_text_align(text_align)
-    },
-    CanvasMessage::SetTextBaseline(text_baseline) => {
-        canvas.set_text_baseline(text_baseline)
-    },
-    CanvasMessage::PutImageData(rect, img) => {
-        info!("PutImageData");
-        canvas.put_image_data(img.to_vec(), rect);
-    },
-    CanvasMessage::Recreate(size) => {
-        canvas.recreate(size);
-    },
-  }
+        ) => {
+            let data = imagedata.map_or_else(
+                || vec![0; image_size.width as usize * image_size.height as usize * 4],
+                |bytes| bytes.into_vec(),
+            );
+            canvas.draw_image(data, image_size, dest_rect, source_rect, smoothing_enabled)
+        },
+        CanvasMessage::MoveTo(ref point) => canvas.move_to(point),
+        CanvasMessage::LineTo(ref point) => canvas.line_to(point),
+        CanvasMessage::Rect(ref rect) => canvas.rect(rect),
+        CanvasMessage::QuadraticCurveTo(ref cp, ref pt) => canvas.quadratic_curve_to(cp, pt),
+        CanvasMessage::BezierCurveTo(ref cp1, ref cp2, ref pt) => {
+            canvas.bezier_curve_to(cp1, cp2, pt)
+        },
+        CanvasMessage::Arc(ref center, radius, start, end, ccw) => {
+            canvas.arc(center, radius, start, end, ccw)
+        },
+        CanvasMessage::ArcTo(ref cp1, ref cp2, radius) => canvas.arc_to(cp1, cp2, radius),
+        CanvasMessage::Ellipse(ref center, radius_x, radius_y, rotation, start, end, ccw) => {
+            canvas.ellipse(center, radius_x, radius_y, rotation, start, end, ccw)
+        },
+        CanvasMessage::RestoreContext => canvas.restore_context_state(),
+        CanvasMessage::SaveContext => canvas.save_context_state(),
+        CanvasMessage::SetLineWidth(width) => canvas.set_line_width(width),
+        CanvasMessage::SetLineCap(cap) => canvas.set_line_cap(cap),
+        CanvasMessage::SetLineJoin(join) => canvas.set_line_join(join),
+        CanvasMessage::SetMiterLimit(limit) => canvas.set_miter_limit(limit),
+        CanvasMessage::SetTransform(ref matrix) => canvas.set_transform(matrix),
+        CanvasMessage::SetGlobalAlpha(alpha) => canvas.set_global_alpha(alpha),
+        CanvasMessage::SetGlobalComposition(op) => canvas.set_global_composition(op),
+        CanvasMessage::SetShadowOffsetX(value) => canvas.set_shadow_offset_x(value),
+        CanvasMessage::SetShadowOffsetY(value) => canvas.set_shadow_offset_y(value),
+        CanvasMessage::SetShadowBlur(value) => canvas.set_shadow_blur(value),
+        CanvasMessage::SetShadowColor(color) => canvas.set_shadow_color(color),
+        CanvasMessage::SetFont(font_style) => canvas.set_font(font_style),
+        CanvasMessage::SetTextAlign(text_align) => canvas.set_text_align(text_align),
+        CanvasMessage::SetTextBaseline(text_baseline) => canvas.set_text_baseline(text_baseline),
+        CanvasMessage::PutImageData(rect, img) => {
+            info!("PutImageData");
+            canvas.put_image_data(img.to_vec(), rect);
+        },
+        CanvasMessage::Recreate(size) => {
+            canvas.recreate(size);
+        },
+    }
 
-  info!("done handling CanvasMessage");
+    info!("done handling CanvasMessage");
 }
 
 fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtocol> {
@@ -325,73 +305,66 @@ pub fn create_canvas_session(
 
 #[derive(Clone)]
 pub struct CanvasSession {
-  runtime: Arc < runtime::Runtime >,
-  message_buffer: Arc < Mutex < Vec < CanvasMessage > > >,
-  shared_channel: SharedChannel < CanvasProtocol >,
+    runtime: Arc<runtime::Runtime>,
+    message_buffer: Arc<Mutex<Vec<CanvasMessage>>>,
+    shared_channel: SharedChannel<CanvasProtocol>,
 }
 
 impl CanvasSession {
-  pub fn new(shared_channel: SharedChannel<CanvasProtocol>)
-    -> CanvasSession
-  {
-    CanvasSession {
-      shared_channel,
-      message_buffer: Arc::new(Mutex::new(vec![])),
-      runtime: Arc::new(
-        runtime::Builder::new_multi_thread()
-          .enable_time()
-          .build()
-          .unwrap()),
+    pub fn new(shared_channel: SharedChannel<CanvasProtocol>) -> CanvasSession {
+        CanvasSession {
+            shared_channel,
+            message_buffer: Arc::new(Mutex::new(vec![])),
+            runtime: Arc::new(
+                runtime::Builder::new_multi_thread()
+                    .enable_time()
+                    .build()
+                    .unwrap(),
+            ),
+        }
     }
-  }
 
-  pub fn flush_messages (&self)
-  {
-      let mut messages = self.message_buffer.lock().unwrap();
-      if ! messages.is_empty() {
-          info!("flushing {} messages", messages.len());
-          let messages2 = messages.split_off(0);
-          send_canvas_messages(self.shared_channel.clone(), messages2);
-      }
-  }
+    pub fn flush_messages(&self) {
+        let mut messages = self.message_buffer.lock().unwrap();
+        if !messages.is_empty() {
+            info!("flushing {} messages", messages.len());
+            let messages2 = messages.split_off(0);
+            send_canvas_messages(self.shared_channel.clone(), messages2);
+        }
+    }
 
-  pub fn send_canvas_message(&self, message: CanvasMessage)
-  {
-      let mut messages = self.message_buffer.lock().unwrap();
-      let was_empty = messages.is_empty();
-      messages.push(message);
+    pub fn send_canvas_message(&self, message: CanvasMessage) {
+        let mut messages = self.message_buffer.lock().unwrap();
+        let was_empty = messages.is_empty();
+        messages.push(message);
 
-      if was_empty {
-          let cloned = self.clone();
-          task::spawn(async move {
-              time::sleep(Duration::from_millis(10)).await;
-              cloned.flush_messages();
-          });
-      }
-  }
+        if was_empty {
+            let cloned = self.clone();
+            task::spawn(async move {
+                time::sleep(Duration::from_millis(10)).await;
+                cloned.flush_messages();
+            });
+        }
+    }
 
-  pub fn get_shared_channel(&self) -> SharedChannel<CanvasProtocol>
-  {
-    self.flush_messages();
-    self.shared_channel.clone()
-  }
+    pub fn get_shared_channel(&self) -> SharedChannel<CanvasProtocol> {
+        self.flush_messages();
+        self.shared_channel.clone()
+    }
 
-  pub fn block_on<F: Future>(&self, future: F) -> F::Output
-  {
-    self.runtime.block_on(future)
-  }
+    pub fn block_on<F: Future>(&self, future: F) -> F::Output {
+        self.runtime.block_on(future)
+    }
 }
 
-fn send_canvas_messages (
-  session: SharedChannel < CanvasProtocol >,
-  messages: Vec < CanvasMessage >,
-) {
-  async_acquire_shared_session ( session, move | chan | async move {
-      choose! ( chan, Messages,
-          send_value_to! ( chan, messages,
-              release_shared_session (chan,
-                  terminate! () ) ) )
-  });
+fn send_canvas_messages(session: SharedChannel<CanvasProtocol>, messages: Vec<CanvasMessage>) {
+    async_acquire_shared_session(session, move |chan| async move {
+        choose!(
+            chan,
+            Messages,
+            send_value_to!(chan, messages, release_shared_session(chan, terminate!()))
+        )
+    });
 }
 
 pub async fn draw_image_in_other(
@@ -403,30 +376,30 @@ pub async fn draw_image_in_other(
     smoothing: bool,
 ) {
     run_session(acquire_shared_session!(source, source_chan =>
-      choose!(
-          source_chan,
-          GetImageData,
-          send_value_to!(
-              source_chan,
-              (source_rect.to_u64(), image_size.to_u64()),
-              receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
-                  release_shared_session(
-                      source_chan,
-                      acquire_shared_session!(target, target_chan =>
-                          choose!(
-                              target_chan,
-                              Message,
-                              send_value_to!(
-                                  target_chan,
-                                  CanvasMessage::DrawImage(
-                                      Some(ByteBuf::from(image.to_vec())),
-                                      source_rect.size,
-                                      dest_rect,
-                                      source_rect,
-                                      smoothing
-                                  ),
-                                  release_shared_session(target_chan, terminate())
-                              ))))
-              })))))
-      .await;
+    choose!(
+        source_chan,
+        GetImageData,
+        send_value_to!(
+            source_chan,
+            (source_rect.to_u64(), image_size.to_u64()),
+            receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
+                release_shared_session(
+                    source_chan,
+                    acquire_shared_session!(target, target_chan =>
+                        choose!(
+                            target_chan,
+                            Message,
+                            send_value_to!(
+                                target_chan,
+                                CanvasMessage::DrawImage(
+                                    Some(ByteBuf::from(image.to_vec())),
+                                    source_rect.size,
+                                    dest_rect,
+                                    source_rect,
+                                    smoothing
+                                ),
+                                release_shared_session(target_chan, terminate())
+                            ))))
+            })))))
+    .await;
 }

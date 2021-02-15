@@ -41,7 +41,8 @@ use euclid::{
     default::{Point2D, Rect, Size2D, Transform2D},
     vec2,
 };
-use ipc_channel::ipc::{IpcSharedMemory};
+use ferrite_session::*;
+use ipc_channel::ipc::IpcSharedMemory;
 use net_traits::image_cache::{ImageCache, ImageResponse};
 use net_traits::request::CorsSettings;
 use pixels::PixelFormat;
@@ -52,12 +53,11 @@ use servo_url::{ImmutableOrigin, ServoUrl};
 use std::cell::Cell;
 use std::fmt;
 use std::str::FromStr;
-use std::sync::{Arc};
+use std::sync::Arc;
 use style::properties::longhands::font_variant_caps::computed_value::T as FontVariantCaps;
 use style::properties::style_structs::Font;
 use style::values::computed::font::FontStyle;
 use style_traits::values::ToCss;
-use ferrite_session::*;
 
 #[unrooted_must_root_lint::must_root]
 #[derive(Clone, JSTraceable, MallocSizeOf)]
@@ -327,17 +327,27 @@ impl CanvasState {
 
         let shared = self.session.get_shared_channel();
 
-        let data = self.session.block_on(
-            async_acquire_shared_session_with_result ( shared,
-                move | chan | async move {
-                    choose! ( chan, GetImageData,
-                        send_value_to! ( chan, (rect, canvas_size),
+        let data = self
+            .session
+            .block_on(async_acquire_shared_session_with_result(
+                shared,
+                move |chan| async move {
+                    choose!(
+                        chan,
+                        GetImageData,
+                        send_value_to!(
+                            chan,
+                            (rect, canvas_size),
                             receive_value_from!( chan, data =>
-                                release_shared_session ( chan,
-                                    send_value ( data,
-                                        terminate! ()
-                                    )))))
-            })).unwrap();
+                            release_shared_session ( chan,
+                                send_value ( data,
+                                    terminate! ()
+                                )))
+                        )
+                    )
+                },
+            ))
+            .unwrap();
 
         let mut pixels = (&data).to_vec();
 
@@ -1484,16 +1494,26 @@ impl CanvasState {
 
         debug!("[is_point_in_path] acquiring shared session");
         let shared = self.session.get_shared_channel();
-        let res = self.session.block_on(
-            async_acquire_shared_session_with_result ( shared,
-                move | chan | async move {
-                    choose! ( chan, IsPointInPath,
-                        send_value_to! ( chan, (x, y, fill_rule),
+        let res = self
+            .session
+            .block_on(async_acquire_shared_session_with_result(
+                shared,
+                move |chan| async move {
+                    choose!(
+                        chan,
+                        IsPointInPath,
+                        send_value_to!(
+                            chan,
+                            (x, y, fill_rule),
                             receive_value_from! ( chan, result =>
                                 release_shared_session ( chan,
                                     send_value! ( result,
-                                        terminate () ) ))))
-                })).unwrap();
+                                        terminate () ) ))
+                        )
+                    )
+                },
+            ))
+            .unwrap();
 
         debug!("[is_point_in_path] released shared session");
         res
@@ -1563,16 +1583,23 @@ impl CanvasState {
     pub fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
         debug!("[get_transform] acquiring shared session");
         let shared = self.session.get_shared_channel();
-        let transform = self.session.block_on(
-            async_acquire_shared_session_with_result ( shared,
-                move | chan | async move {
-                    choose! ( chan, GetTransform,
+        let transform = self
+            .session
+            .block_on(async_acquire_shared_session_with_result(
+                shared,
+                move |chan| async move {
+                    choose!(
+                        chan,
+                        GetTransform,
                         receive_value_from! ( chan, transform => {
                             release_shared_session ( chan,
                                 send_value! ( transform,
                                     terminate () ))
-                        } ))
-                })).unwrap();
+                        } )
+                    )
+                },
+            ))
+            .unwrap();
         debug!("[get_transform] released shared session");
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())
@@ -1645,15 +1672,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-beziercurveto
-    pub fn bezier_curve_to(
-        &self,
-        cp1x: f64,
-        cp1y: f64,
-        cp2x: f64,
-        cp2y: f64,
-        x: f64,
-        y: f64,
-    ) {
+    pub fn bezier_curve_to(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
         if !(cp1x.is_finite() &&
             cp1y.is_finite() &&
             cp2x.is_finite() &&
@@ -1671,15 +1690,7 @@ impl CanvasState {
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-arc
-    pub fn arc(
-        &self,
-        x: f64,
-        y: f64,
-        r: f64,
-        start: f64,
-        end: f64,
-        ccw: bool,
-    ) -> ErrorResult {
+    pub fn arc(&self, x: f64, y: f64, r: f64, start: f64, end: f64, ccw: bool) -> ErrorResult {
         if !([x, y, r, start, end].iter().all(|x| x.is_finite())) {
             return Ok(());
         }

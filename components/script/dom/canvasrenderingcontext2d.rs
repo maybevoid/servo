@@ -120,7 +120,7 @@ impl CanvasRenderingContext2D {
 }
 
 impl LayoutDom<'_, CanvasRenderingContext2D> {
-#[allow(unsafe_code)]
+    #[allow(unsafe_code)]
     pub unsafe fn get_canvas_session(&self) -> CanvasSession {
         self.unsafe_get().get_canvas_session()
     }
@@ -262,13 +262,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-filltext
     fn FillText(&self, text: DOMString, x: f64, y: f64, max_width: Option<f64>) {
-        self.canvas_state.fill_text(
-            self.canvas.as_ref().map(|c| &**c),
-            text,
-            x,
-            y,
-            max_width,
-        );
+        self.canvas_state
+            .fill_text(self.canvas.as_ref().map(|c| &**c), text, x, y, max_width);
         self.mark_as_dirty();
     }
 
@@ -320,12 +315,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
     fn DrawImage(&self, image: CanvasImageSource, dx: f64, dy: f64) -> ErrorResult {
-        self.canvas_state.draw_image(
-            self.canvas.as_ref().map(|c| &**c),
-            image,
-            dx,
-            dy,
-        )
+        self.canvas_state
+            .draw_image(self.canvas.as_ref().map(|c| &**c), image, dx, dy)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
@@ -337,14 +328,8 @@ impl CanvasRenderingContext2DMethods for CanvasRenderingContext2D {
         dw: f64,
         dh: f64,
     ) -> ErrorResult {
-        self.canvas_state.draw_image_(
-            self.canvas.as_ref().map(|c| &**c),
-            image,
-            dx,
-            dy,
-            dw,
-            dh,
-        )
+        self.canvas_state
+            .draw_image_(self.canvas.as_ref().map(|c| &**c), image, dx, dy, dw, dh)
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
