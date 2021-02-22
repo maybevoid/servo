@@ -348,7 +348,7 @@ impl CanvasState {
             ))
             .unwrap();
 
-        let mut pixels = (&data).to_vec();
+        let mut pixels = data.into_vec();
 
         for chunk in pixels.chunks_mut(4) {
             let b = chunk[0];
@@ -1364,17 +1364,18 @@ impl CanvasState {
             imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size))
         });
 
-        let shared = self.session.get_shared_channel();
-        self.session
-            .block_on(async_acquire_shared_session(
-                shared,
-                move |chan|
-                    choose!(
-                        chan,
-                        PutImageData,
-                        send_value_to ( chan, (dst_rect, pixels),
-                            release_shared_session ( chan,
-                                    terminate () ))))).unwrap();
+        self.send_canvas_message(CanvasMessage::PutImageData(dst_rect, pixels));
+
+        // let shared = self.session.get_shared_channel();
+        // async_acquire_shared_session(
+        //     shared,
+        //     move |chan|
+        //         choose!(
+        //             chan,
+        //             PutImageData,
+        //             send_value_to ( chan, (dst_rect, pixels),
+        //                 release_shared_session ( chan,
+        //                         terminate () ))));
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage

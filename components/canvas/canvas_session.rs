@@ -6,7 +6,7 @@ use canvas_traits::canvas::*;
 use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
 use gfx::font_cache_thread::FontCacheThread;
-use ipc_channel::ipc::IpcSharedMemory;
+use ipc_channel::ipc::{IpcSharedMemory};
 use log::info;
 use serde;
 use serde_bytes::ByteBuf;
@@ -32,6 +32,7 @@ pub enum CanvasMessage {
     FillRect(Rect<f32>, FillOrStrokeStyle),
     LineTo(Point2D<f32>),
     MoveTo(Point2D<f32>),
+    PutImageData(Rect<u64>, ByteBuf),
     QuadraticCurveTo(Point2D<f32>, Point2D<f32>),
     Rect(Rect<f32>),
     RestoreContext,
@@ -55,6 +56,44 @@ pub enum CanvasMessage {
     Recreate(Size2D<u64>),
 }
 
+// #[derive(Debug)]
+// pub struct IpcBytes {
+//   receiver: IpcBytesReceiver
+// }
+
+// impl IpcBytes {
+//   pub fn from_bytes(data: &[u8]) -> Self {
+//     let (sender, receiver) = bytes_channel().unwrap();
+//     sender.send(data).unwrap();
+//     IpcBytes { receiver }
+//   }
+
+//   pub fn to_vec(self) -> Vec<u8> {
+//     self.receiver.recv().unwrap()
+//   }
+// }
+
+// impl serde::Serialize for IpcBytes
+// {
+//   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//   where
+//     S: serde::Serializer,
+//   {
+//     self.receiver.serialize(serializer)
+//   }
+// }
+
+// impl < 'a > serde::Deserialize<'a> for IpcBytes
+// {
+//   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//   where
+//     D: serde::Deserializer<'a>
+//   {
+//     let receiver = IpcBytesReceiver::deserialize(deserializer)?;
+//     Ok(IpcBytes { receiver })
+//   }
+// }
+
 define_choice! { CanvasOps;
   Message: ReceiveValue <
     CanvasMessage,
@@ -71,13 +110,9 @@ define_choice! { CanvasOps;
   GetImageData: ReceiveValue <
     ( Rect<u64>, Size2D<u64>),
     SendValue <
-      IpcSharedMemory,
+      ByteBuf,
       Z
     >
-  >,
-  PutImageData: ReceiveValue <
-    ( Rect<u64>, ByteBuf ),
-    Z
   >,
   IsPointInPath: ReceiveValue <
     ( f64, f64, FillRule ),
@@ -148,6 +183,8 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
         CanvasMessage::MoveTo(ref point) => canvas.move_to(point),
         CanvasMessage::LineTo(ref point) => canvas.line_to(point),
         CanvasMessage::Rect(ref rect) => canvas.rect(rect),
+        CanvasMessage::PutImageData(rect, img) =>
+          canvas.put_image_data(img.into_vec(), rect),
         CanvasMessage::QuadraticCurveTo(ref cp, ref pt) => canvas.quadratic_curve_to(cp, pt),
         CanvasMessage::BezierCurveTo(ref cp1, ref cp2, ref pt) => {
             canvas.bezier_curve_to(cp1, cp2, pt)
@@ -215,24 +252,13 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
       },
       GetImageData => {
         info!("GetImageData");
-        // receive_value ( move | msg: ( Rect<u64>, Size2D<u64> ) | {
-        //   let (dest_rect, canvas_size) = msg;
         receive_value ( move | (dest_rect, canvas_size) | {
           let pixels = canvas.read_pixels(dest_rect, canvas_size);
 
-          send_value( IpcSharedMemory::from_bytes(&pixels),
+          send_value( ByteBuf::from(pixels),
             detach_shared_session (
               run_canvas_session ( canvas )
             ))
-        })
-      },
-      PutImageData => {
-        info!("PutImageData");
-        receive_value ( move | (rect, img): ( Rect<u64>, ByteBuf ) | {
-          canvas.put_image_data(img.into_vec(), rect);
-          detach_shared_session (
-            run_canvas_session ( canvas )
-          )
         })
       },
       IsPointInPath => {
@@ -391,7 +417,7 @@ pub async fn draw_image_in_other(
         send_value_to (
             source_chan,
             (source_rect.to_u64(), image_size.to_u64()),
-            receive_value_from(source_chan, move | image: IpcSharedMemory |
+            receive_value_from(source_chan, move | image: ByteBuf |
                 release_shared_session(
                     source_chan,
                     acquire_shared_session(target, move | target_chan |
@@ -401,7 +427,7 @@ pub async fn draw_image_in_other(
                             send_value_to(
                                 target_chan,
                                 CanvasMessage::DrawImage(
-                                    Some(ByteBuf::from(image.to_vec())),
+                                    Some(image),
                                     source_rect.size,
                                     dest_rect,
                                     source_rect,
