@@ -4387,11 +4387,11 @@ where
         response_sender: IpcSender<SharedChannel<CanvasProtocol>>,
     ) {
         let antialias = self.enable_canvas_antialiasing;
-        let canvas = run_session_with_result(acquire_shared_session!(self.canvas_session, chan =>
-        send_value_to!( chan, (size, antialias),
-            receive_value_from!(chan, canvas =>
+        let canvas = run_session_with_result(acquire_shared_session(self.canvas_session.clone(), move | chan |
+        send_value_to( chan, (size, antialias),
+            receive_value_from(chan, move | canvas |
                 release_shared_session(chan,
-                    send_value!(canvas,
+                    send_value(canvas,
                         terminate()))
             ))))
         .await;

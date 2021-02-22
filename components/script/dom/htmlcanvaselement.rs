@@ -303,11 +303,11 @@ impl HTMLCanvasElement {
                 let res = session
                     .block_on(async_acquire_shared_session_with_result(
                         shared,
-                        move |chan| async move {
+                        move |chan| {
                             choose!(
                                 chan,
                                 FromScript,
-                                receive_value_from!(chan, data =>
+                                receive_value_from(chan, move | data |
                                     release_shared_session(chan,
                                         send_value( data,
                                             terminate())))

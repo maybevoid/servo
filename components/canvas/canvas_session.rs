@@ -184,57 +184,57 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
     info!("done handling CanvasMessage");
 }
 
-fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtocol> {
+fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtocol> {
     accept_shared_session(offer_choice! {
       Message => {
-        receive_value! ( message => {
+        receive_value ( move | message | {
           handle_canvas_message (&mut canvas, message);
           detach_shared_session (
-            canvas_session ( canvas )
+            run_canvas_session ( canvas )
           )
         })
       },
       Messages => {
-        receive_value! ( messages => {
+        receive_value ( move | messages | {
           info!("handling CanvasMessages {:?}", messages);
           for message in messages {
             handle_canvas_message (&mut canvas, message);
           }
 
           detach_shared_session (
-            canvas_session ( canvas )
+            run_canvas_session ( canvas )
           )
         })
       },
       GetTransform => {
         info!("GetTransform");
         let transform = canvas.get_transform();
-        send_value! ( transform,
+        send_value ( transform,
           detach_shared_session (
-            canvas_session ( canvas )
+            run_canvas_session ( canvas )
           ))
       },
       GetImageData => {
         info!("GetImageData");
-        receive_value( move | msg: ( Rect<u64>, Size2D<u64> ) | async move {
+        receive_value ( move | msg: ( Rect<u64>, Size2D<u64> ) | {
           let (dest_rect, canvas_size) = msg;
           let pixels = canvas.read_pixels(dest_rect, canvas_size);
 
           send_value( IpcSharedMemory::from_bytes(&pixels),
             detach_shared_session (
-              canvas_session ( canvas )
+              run_canvas_session ( canvas )
             ))
         })
       },
       IsPointInPath => {
         info!("IsPointInPath");
-        receive_value!( msg => {
+        receive_value ( move | msg | {
           let (x, y, fill_rule) = msg;
           let res = canvas.is_point_in_path_bool(x, y, fill_rule);
 
-          send_value!(res,
+          send_value ( res,
             detach_shared_session (
-              canvas_session ( canvas )
+              run_canvas_session ( canvas )
             ))
         })
       },
@@ -242,7 +242,7 @@ fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtoc
         info!("FromLayout");
         send_value ( canvas.get_data(),
           detach_shared_session (
-            canvas_session ( canvas )
+            run_canvas_session ( canvas )
           ))
       },
       FromScript => {
@@ -250,7 +250,7 @@ fn canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtoc
         let bytes = canvas.get_pixels();
         send_value( IpcSharedMemory::from_bytes(&bytes),
           detach_shared_session (
-            canvas_session ( canvas )
+            run_canvas_session ( canvas )
           ))
       },
     })
@@ -262,7 +262,7 @@ struct CanvasContext {
 }
 
 fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasProtocol> {
-    accept_shared_session(receive_value!( param => {
+    accept_shared_session(receive_value( move | param | {
       let (size, antialias) = param;
 
       let antialias_mode = if antialias {
@@ -278,11 +278,11 @@ fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasPr
         ctx.font_cache_thread.clone(),
       );
 
-      let (session, _) = run_shared_session (
-        canvas_session ( canvas )
+      let session = run_shared_session (
+        run_canvas_session ( canvas )
       );
 
-      send_value! ( session,
+      send_value ( session,
         detach_shared_session (
           run_create_canvas_session ( ctx )
         ) )
@@ -298,7 +298,7 @@ pub fn create_canvas_session(
         font_cache_thread: font_cache_thread,
     };
 
-    let (channel, _) = run_shared_session(run_create_canvas_session(ctx));
+    let channel = run_shared_session(run_create_canvas_session(ctx));
 
     channel
 }
@@ -358,11 +358,11 @@ impl CanvasSession {
 }
 
 fn send_canvas_messages(session: SharedChannel<CanvasProtocol>, messages: Vec<CanvasMessage>) {
-    async_acquire_shared_session(session, move |chan| async move {
+    async_acquire_shared_session(session, move |chan| {
         choose!(
             chan,
             Messages,
-            send_value_to!(chan, messages, release_shared_session(chan, terminate!()))
+            send_value_to(chan, messages, release_shared_session(chan, terminate()))
         )
     });
 }
@@ -375,21 +375,21 @@ pub async fn draw_image_in_other(
     source_rect: Rect<f64>,
     smoothing: bool,
 ) {
-    run_session(acquire_shared_session!(source, source_chan =>
+    run_session(acquire_shared_session(source, move | source_chan |
     choose!(
         source_chan,
         GetImageData,
-        send_value_to!(
+        send_value_to (
             source_chan,
             (source_rect.to_u64(), image_size.to_u64()),
-            receive_value_from(source_chan, move | image: IpcSharedMemory | async move {
+            receive_value_from(source_chan, move | image: IpcSharedMemory |
                 release_shared_session(
                     source_chan,
-                    acquire_shared_session!(target, target_chan =>
+                    acquire_shared_session(target, move | target_chan |
                         choose!(
                             target_chan,
                             Message,
-                            send_value_to!(
+                            send_value_to(
                                 target_chan,
                                 CanvasMessage::DrawImage(
                                     Some(ByteBuf::from(image.to_vec())),
@@ -399,7 +399,5 @@ pub async fn draw_image_in_other(
                                     smoothing
                                 ),
                                 release_shared_session(target_chan, terminate())
-                            ))))
-            })))))
-    .await;
+                            ))))))))).await;
 }

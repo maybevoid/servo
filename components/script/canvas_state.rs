@@ -331,17 +331,17 @@ impl CanvasState {
             .session
             .block_on(async_acquire_shared_session_with_result(
                 shared,
-                move |chan| async move {
+                move |chan| {
                     choose!(
                         chan,
                         GetImageData,
-                        send_value_to!(
+                        send_value_to(
                             chan,
                             (rect, canvas_size),
-                            receive_value_from!( chan, data =>
+                            receive_value_from( chan, move | data |
                             release_shared_session ( chan,
                                 send_value ( data,
-                                    terminate! ()
+                                    terminate ()
                                 )))
                         )
                     )
@@ -1498,21 +1498,19 @@ impl CanvasState {
             .session
             .block_on(async_acquire_shared_session_with_result(
                 shared,
-                move |chan| async move {
+                move |chan|
                     choose!(
                         chan,
                         IsPointInPath,
-                        send_value_to!(
+                        send_value_to(
                             chan,
                             (x, y, fill_rule),
-                            receive_value_from! ( chan, result =>
+                            receive_value_from ( chan, move | result |
                                 release_shared_session ( chan,
-                                    send_value! ( result,
+                                    send_value ( result,
                                         terminate () ) ))
                         )
-                    )
-                },
-            ))
+                    )))
             .unwrap();
 
         debug!("[is_point_in_path] released shared session");
@@ -1587,19 +1585,14 @@ impl CanvasState {
             .session
             .block_on(async_acquire_shared_session_with_result(
                 shared,
-                move |chan| async move {
+                move |chan|
                     choose!(
                         chan,
                         GetTransform,
-                        receive_value_from! ( chan, transform => {
+                        receive_value_from ( chan, move | transform |
                             release_shared_session ( chan,
-                                send_value! ( transform,
-                                    terminate () ))
-                        } )
-                    )
-                },
-            ))
-            .unwrap();
+                                send_value ( transform,
+                                    terminate () )))))).unwrap();
         debug!("[get_transform] released shared session");
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())

@@ -61,11 +61,11 @@ impl PaintRenderingContext2D {
         let res = session
             .block_on(async_acquire_shared_session_with_result(
                 shared,
-                move |chan| async move {
+                move |chan| {
                     choose!(
                         chan,
                         FromLayout,
-                        receive_value_from!(chan, res =>
+                        receive_value_from(chan, move | res |
                             release_shared_session(chan,
                                 send_value ( res,
                                     terminate())))
