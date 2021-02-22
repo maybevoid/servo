@@ -52,7 +52,6 @@ pub enum CanvasMessage {
     SetFont(FontStyleStruct),
     SetTextAlign(TextAlign),
     SetTextBaseline(TextBaseline),
-    PutImageData(Rect<u64>, IpcSharedMemory),
     Recreate(Size2D<u64>),
 }
 
@@ -75,6 +74,10 @@ define_choice! { CanvasOps;
       IpcSharedMemory,
       Z
     >
+  >,
+  PutImageData: ReceiveValue <
+    ( Rect<u64>, ByteBuf ),
+    Z
   >,
   IsPointInPath: ReceiveValue <
     ( f64, f64, FillRule ),
@@ -172,10 +175,6 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
         CanvasMessage::SetFont(font_style) => canvas.set_font(font_style),
         CanvasMessage::SetTextAlign(text_align) => canvas.set_text_align(text_align),
         CanvasMessage::SetTextBaseline(text_baseline) => canvas.set_text_baseline(text_baseline),
-        CanvasMessage::PutImageData(rect, img) => {
-            info!("PutImageData");
-            canvas.put_image_data(img.to_vec(), rect);
-        },
         CanvasMessage::Recreate(size) => {
             canvas.recreate(size);
         },
@@ -216,14 +215,24 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
       },
       GetImageData => {
         info!("GetImageData");
-        receive_value ( move | msg: ( Rect<u64>, Size2D<u64> ) | {
-          let (dest_rect, canvas_size) = msg;
+        // receive_value ( move | msg: ( Rect<u64>, Size2D<u64> ) | {
+        //   let (dest_rect, canvas_size) = msg;
+        receive_value ( move | (dest_rect, canvas_size) | {
           let pixels = canvas.read_pixels(dest_rect, canvas_size);
 
           send_value( IpcSharedMemory::from_bytes(&pixels),
             detach_shared_session (
               run_canvas_session ( canvas )
             ))
+        })
+      },
+      PutImageData => {
+        info!("PutImageData");
+        receive_value ( move | (rect, img): ( Rect<u64>, ByteBuf ) | {
+          canvas.put_image_data(img.into_vec(), rect);
+          detach_shared_session (
+            run_canvas_session ( canvas )
+          )
         })
       },
       IsPointInPath => {

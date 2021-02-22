@@ -42,7 +42,6 @@ use euclid::{
     vec2,
 };
 use ferrite_session::*;
-use ipc_channel::ipc::IpcSharedMemory;
 use net_traits::image_cache::{ImageCache, ImageResponse};
 use net_traits::request::CorsSettings;
 use pixels::PixelFormat;
@@ -1361,11 +1360,21 @@ impl CanvasState {
         };
 
         // Step 7.
-        let pixels: IpcSharedMemory = IpcSharedMemory::from_bytes(unsafe {
-            &imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size))
+        let pixels: ByteBuf = ByteBuf::from(unsafe {
+            imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size))
         });
 
-        self.send_canvas_message(CanvasMessage::PutImageData(dst_rect, pixels))
+        let shared = self.session.get_shared_channel();
+        self.session
+            .block_on(async_acquire_shared_session(
+                shared,
+                move |chan|
+                    choose!(
+                        chan,
+                        PutImageData,
+                        send_value_to ( chan, (dst_rect, pixels),
+                            release_shared_session ( chan,
+                                    terminate () ))))).unwrap();
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage
