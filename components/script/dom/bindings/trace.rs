@@ -48,7 +48,7 @@ use crate::task::TaskBox;
 use app_units::Au;
 use canvas::canvas_session::CanvasSession;
 use canvas_traits::canvas::{
-    CanvasGradientStop, CanvasId, LinearGradientStyle, RadialGradientStyle,
+    CanvasGradientStop, LinearGradientStyle, RadialGradientStyle,
 };
 use canvas_traits::canvas::{
     CompositionOrBlending, Direction, LineCapStyle, LineJoinStyle, RepetitionStyle, TextAlign,
@@ -653,7 +653,6 @@ unsafe_no_jsmanaged_fields!(
 unsafe_no_jsmanaged_fields!(ScriptToConstellationChan);
 unsafe_no_jsmanaged_fields!(InteractiveMetrics);
 unsafe_no_jsmanaged_fields!(InteractiveWindow);
-unsafe_no_jsmanaged_fields!(CanvasId);
 unsafe_no_jsmanaged_fields!(SourceSet);
 unsafe_no_jsmanaged_fields!(AudioBuffer);
 unsafe_no_jsmanaged_fields!(Arc<Mutex<AudioContext>>);

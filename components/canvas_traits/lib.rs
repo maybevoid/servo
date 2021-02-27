@@ -6,10 +6,6 @@
 #![crate_type = "rlib"]
 #![deny(unsafe_code)]
 
-use crate::canvas::CanvasId;
-use crossbeam_channel::Sender;
-use euclid::default::Size2D;
-
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -21,12 +17,3 @@ pub mod canvas;
 #[macro_use]
 pub mod webgl;
 mod webgl_channel;
-
-pub enum ConstellationCanvasMsg {
-    Create {
-        id_sender: Sender<CanvasId>,
-        size: Size2D<u64>,
-        antialias: bool,
-    },
-    Exit,
-}

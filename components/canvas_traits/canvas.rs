@@ -3,12 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use cssparser::RGBA;
-use euclid::default::{Point2D, Rect, Size2D, Transform2D};
-use ipc_channel::ipc::{IpcBytesReceiver, IpcBytesSender, IpcSender, IpcSharedMemory};
+use euclid::default::{Size2D};
 use serde_bytes::ByteBuf;
 use std::default::Default;
 use std::str::FromStr;
-use style::properties::style_structs::Font as FontStyleStruct;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum FillRule {
@@ -16,74 +14,9 @@ pub enum FillRule {
     Evenodd,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize)]
-pub struct CanvasId(pub u64);
-
-#[derive(Deserialize, Serialize)]
-pub enum CanvasMsg {
-    Canvas2d(Canvas2dMsg, CanvasId),
-    FromLayout(FromLayoutMsg, CanvasId),
-    FromScript(FromScriptMsg, CanvasId),
-    Recreate(Size2D<u64>, CanvasId),
-    Close(CanvasId),
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CanvasImageData {
     pub image_key: webrender_api::ImageKey,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub enum Canvas2dMsg {
-    Arc(Point2D<f32>, f32, f32, f32, bool),
-    ArcTo(Point2D<f32>, Point2D<f32>, f32),
-    DrawImage(Option<ByteBuf>, Size2D<f64>, Rect<f64>, Rect<f64>, bool),
-    DrawImageInOther(CanvasId, Size2D<f64>, Rect<f64>, Rect<f64>, bool),
-    BeginPath,
-    BezierCurveTo(Point2D<f32>, Point2D<f32>, Point2D<f32>),
-    ClearRect(Rect<f32>),
-    Clip,
-    ClosePath,
-    Ellipse(Point2D<f32>, f32, f32, f32, f32, f32, bool),
-    Fill(FillOrStrokeStyle),
-    FillText(String, f64, f64, Option<f64>, FillOrStrokeStyle, bool),
-    FillRect(Rect<f32>, FillOrStrokeStyle),
-    GetImageData(Rect<u64>, Size2D<u64>, IpcBytesSender),
-    GetTransform(IpcSender<Transform2D<f32>>),
-    IsPointInPath(f64, f64, FillRule, IpcSender<bool>),
-    LineTo(Point2D<f32>),
-    MoveTo(Point2D<f32>),
-    PutImageData(Rect<u64>, IpcBytesReceiver),
-    QuadraticCurveTo(Point2D<f32>, Point2D<f32>),
-    Rect(Rect<f32>),
-    RestoreContext,
-    SaveContext,
-    StrokeRect(Rect<f32>, FillOrStrokeStyle),
-    Stroke(FillOrStrokeStyle),
-    SetLineWidth(f32),
-    SetLineCap(LineCapStyle),
-    SetLineJoin(LineJoinStyle),
-    SetMiterLimit(f32),
-    SetGlobalAlpha(f32),
-    SetGlobalComposition(CompositionOrBlending),
-    SetTransform(Transform2D<f32>),
-    SetShadowOffsetX(f64),
-    SetShadowOffsetY(f64),
-    SetShadowBlur(f64),
-    SetShadowColor(RGBA),
-    SetFont(FontStyleStruct),
-    SetTextAlign(TextAlign),
-    SetTextBaseline(TextBaseline),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum FromLayoutMsg {
-    SendData(IpcSender<CanvasImageData>),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum FromScriptMsg {
-    SendPixels(IpcSender<IpcSharedMemory>),
 }
 
 #[derive(Clone, Debug, Deserialize, MallocSizeOf, Serialize)]
