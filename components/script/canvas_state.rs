@@ -337,11 +337,10 @@ impl CanvasState {
                         send_value_to(
                             chan,
                             (rect, canvas_size),
-                            receive_value_from( chan, move | data |
-                            release_shared_session ( chan,
-                                send_value ( data,
-                                    terminate ()
-                                )))
+                            receive_value_from(chan, move |data| release_shared_session(
+                                chan,
+                                send_value(data, terminate())
+                            ))
                         )
                     )
                 },
@@ -1360,9 +1359,8 @@ impl CanvasState {
         };
 
         // Step 7.
-        let pixels: ByteBuf = ByteBuf::from(unsafe {
-            imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size))
-        });
+        let pixels: ByteBuf =
+            ByteBuf::from(unsafe { imagedata.get_rect(Rect::new(src_rect.origin, dst_rect.size)) });
 
         self.send_canvas_message(CanvasMessage::PutImageData(dst_rect, pixels));
     }
@@ -1497,19 +1495,21 @@ impl CanvasState {
             .session
             .block_on(async_acquire_shared_session_with_result(
                 shared,
-                move |chan|
+                move |chan| {
                     choose!(
                         chan,
                         IsPointInPath,
                         send_value_to(
                             chan,
                             (x, y, fill_rule),
-                            receive_value_from ( chan, move | result |
-                                release_shared_session ( chan,
-                                    send_value ( result,
-                                        terminate () ) ))
+                            receive_value_from(chan, move |result| release_shared_session(
+                                chan,
+                                send_value(result, terminate())
+                            ))
                         )
-                    )))
+                    )
+                },
+            ))
             .unwrap();
 
         debug!("[is_point_in_path] released shared session");
@@ -1584,14 +1584,18 @@ impl CanvasState {
             .session
             .block_on(async_acquire_shared_session_with_result(
                 shared,
-                move |chan|
+                move |chan| {
                     choose!(
                         chan,
                         GetTransform,
-                        receive_value_from ( chan, move | transform |
-                            release_shared_session ( chan,
-                                send_value ( transform,
-                                    terminate () )))))).unwrap();
+                        receive_value_from(chan, move |transform| release_shared_session(
+                            chan,
+                            send_value(transform, terminate())
+                        ))
+                    )
+                },
+            ))
+            .unwrap();
         debug!("[get_transform] released shared session");
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())

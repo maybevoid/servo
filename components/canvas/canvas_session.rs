@@ -6,7 +6,7 @@ use canvas_traits::canvas::*;
 use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
 use gfx::font_cache_thread::FontCacheThread;
-use ipc_channel::ipc::{IpcSharedMemory};
+use ipc_channel::ipc::IpcSharedMemory;
 use log::info;
 use serde;
 use serde_bytes::ByteBuf;
@@ -145,8 +145,7 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
         CanvasMessage::MoveTo(ref point) => canvas.move_to(point),
         CanvasMessage::LineTo(ref point) => canvas.line_to(point),
         CanvasMessage::Rect(ref rect) => canvas.rect(rect),
-        CanvasMessage::PutImageData(rect, img) =>
-          canvas.put_image_data(img.into_vec(), rect),
+        CanvasMessage::PutImageData(rect, img) => canvas.put_image_data(img.into_vec(), rect),
         CanvasMessage::QuadraticCurveTo(ref cp, ref pt) => canvas.quadratic_curve_to(cp, pt),
         CanvasMessage::BezierCurveTo(ref cp1, ref cp2, ref pt) => {
             canvas.bezier_curve_to(cp1, cp2, pt)
@@ -183,75 +182,76 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
 }
 
 fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtocol> {
-    accept_shared_session(||
-      offer_choice! {
-        Message => {
-          receive_value ( move | message | {
-            handle_canvas_message (&mut canvas, message);
-            detach_shared_session (
-              run_canvas_session ( canvas )
-            )
-          })
-        },
-        Messages => {
-          receive_value ( move | messages | {
-            info!("handling CanvasMessages {:?}", messages);
-            for message in messages {
+    accept_shared_session(|| {
+        offer_choice! {
+          Message => {
+            receive_value ( move | message | {
               handle_canvas_message (&mut canvas, message);
-            }
+              detach_shared_session (
+                run_canvas_session ( canvas )
+              )
+            })
+          },
+          Messages => {
+            receive_value ( move | messages | {
+              info!("handling CanvasMessages {:?}", messages);
+              for message in messages {
+                handle_canvas_message (&mut canvas, message);
+              }
 
-            detach_shared_session (
-              run_canvas_session ( canvas )
-            )
-          })
-        },
-        GetTransform => {
-          info!("GetTransform");
-          let transform = canvas.get_transform();
-          send_value ( transform,
-            detach_shared_session (
-              run_canvas_session ( canvas )
-            ))
-        },
-        GetImageData => {
-          info!("GetImageData");
-          receive_value ( move | (dest_rect, canvas_size) | {
-            let pixels = canvas.read_pixels(dest_rect, canvas_size);
-
-            send_value( ByteBuf::from(pixels),
+              detach_shared_session (
+                run_canvas_session ( canvas )
+              )
+            })
+          },
+          GetTransform => {
+            info!("GetTransform");
+            let transform = canvas.get_transform();
+            send_value ( transform,
               detach_shared_session (
                 run_canvas_session ( canvas )
               ))
-          })
-        },
-        IsPointInPath => {
-          info!("IsPointInPath");
-          receive_value ( move | msg | {
-            let (x, y, fill_rule) = msg;
-            let res = canvas.is_point_in_path_bool(x, y, fill_rule);
+          },
+          GetImageData => {
+            info!("GetImageData");
+            receive_value ( move | (dest_rect, canvas_size) | {
+              let pixels = canvas.read_pixels(dest_rect, canvas_size);
 
-            send_value ( res,
+              send_value( ByteBuf::from(pixels),
+                detach_shared_session (
+                  run_canvas_session ( canvas )
+                ))
+            })
+          },
+          IsPointInPath => {
+            info!("IsPointInPath");
+            receive_value ( move | msg | {
+              let (x, y, fill_rule) = msg;
+              let res = canvas.is_point_in_path_bool(x, y, fill_rule);
+
+              send_value ( res,
+                detach_shared_session (
+                  run_canvas_session ( canvas )
+                ))
+            })
+          },
+          FromLayout => {
+            info!("FromLayout");
+            send_value ( canvas.get_data(),
               detach_shared_session (
                 run_canvas_session ( canvas )
               ))
-          })
-        },
-        FromLayout => {
-          info!("FromLayout");
-          send_value ( canvas.get_data(),
-            detach_shared_session (
-              run_canvas_session ( canvas )
-            ))
-        },
-        FromScript => {
-          info!("FromScript");
-          let bytes = canvas.get_pixels();
-          send_value( IpcSharedMemory::from_bytes(&bytes),
-            detach_shared_session (
-              run_canvas_session ( canvas )
-            ))
-        },
-      })
+          },
+          FromScript => {
+            info!("FromScript");
+            let bytes = canvas.get_pixels();
+            send_value( IpcSharedMemory::from_bytes(&bytes),
+              detach_shared_session (
+                run_canvas_session ( canvas )
+              ))
+          },
+        }
+    })
 }
 
 struct CanvasContext {
@@ -260,32 +260,31 @@ struct CanvasContext {
 }
 
 fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasProtocol> {
-    accept_shared_session(||
-      receive_value( move | param | {
-        let (size, antialias) = param;
+    accept_shared_session(|| {
+        receive_value(move |param| {
+            let (size, antialias) = param;
 
-        let antialias_mode = if antialias {
-            AntialiasMode::Default
-        } else {
-            AntialiasMode::None
-        };
+            let antialias_mode = if antialias {
+                AntialiasMode::Default
+            } else {
+                AntialiasMode::None
+            };
 
-        let canvas = CanvasData::new(
-          size,
-          ctx.webrender_api.clone(),
-          antialias_mode,
-          ctx.font_cache_thread.clone(),
-        );
+            let canvas = CanvasData::new(
+                size,
+                ctx.webrender_api.clone(),
+                antialias_mode,
+                ctx.font_cache_thread.clone(),
+            );
 
-        let session = run_shared_session (
-          run_canvas_session ( canvas )
-        );
+            let session = run_shared_session(run_canvas_session(canvas));
 
-        send_value ( session,
-          detach_shared_session (
-            run_create_canvas_session ( ctx )
-          ) )
-      } ))
+            send_value(
+                session,
+                detach_shared_session(run_create_canvas_session(ctx)),
+            )
+        })
+    })
 }
 
 pub fn create_canvas_session(
@@ -374,29 +373,33 @@ pub async fn draw_image_in_other(
     source_rect: Rect<f64>,
     smoothing: bool,
 ) {
-    run_session(acquire_shared_session(source, move | source_chan |
-    choose!(
-        source_chan,
-        GetImageData,
-        send_value_to (
+    run_session(acquire_shared_session(source, move |source_chan| {
+        choose!(
             source_chan,
-            (source_rect.to_u64(), image_size.to_u64()),
-            receive_value_from(source_chan, move | image: ByteBuf |
-                release_shared_session(
+            GetImageData,
+            send_value_to(
+                source_chan,
+                (source_rect.to_u64(), image_size.to_u64()),
+                receive_value_from(source_chan, move |image: ByteBuf| release_shared_session(
                     source_chan,
-                    acquire_shared_session(target, move | target_chan |
-                        choose!(
+                    acquire_shared_session(target, move |target_chan| choose!(
+                        target_chan,
+                        Message,
+                        send_value_to(
                             target_chan,
-                            Message,
-                            send_value_to(
-                                target_chan,
-                                CanvasMessage::DrawImage(
-                                    Some(image),
-                                    source_rect.size,
-                                    dest_rect,
-                                    source_rect,
-                                    smoothing
-                                ),
-                                release_shared_session(target_chan, terminate())
-                            ))))))))).await;
+                            CanvasMessage::DrawImage(
+                                Some(image),
+                                source_rect.size,
+                                dest_rect,
+                                source_rect,
+                                smoothing
+                            ),
+                            release_shared_session(target_chan, terminate())
+                        )
+                    ))
+                ))
+            )
+        )
+    }))
+    .await;
 }

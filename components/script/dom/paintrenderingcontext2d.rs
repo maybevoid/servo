@@ -65,10 +65,10 @@ impl PaintRenderingContext2D {
                     choose!(
                         chan,
                         FromLayout,
-                        receive_value_from(chan, move | res |
-                            release_shared_session(chan,
-                                send_value ( res,
-                                    terminate())))
+                        receive_value_from(chan, move |res| release_shared_session(
+                            chan,
+                            send_value(res, terminate())
+                        ))
                     )
                 },
             ))

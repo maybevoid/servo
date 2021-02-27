@@ -307,10 +307,10 @@ impl HTMLCanvasElement {
                             choose!(
                                 chan,
                                 FromScript,
-                                receive_value_from(chan, move | data |
-                                    release_shared_session(chan,
-                                        send_value( data,
-                                            terminate())))
+                                receive_value_from(chan, move |data| release_shared_session(
+                                    chan,
+                                    send_value(data, terminate())
+                                ))
                             )
                         },
                     ))
