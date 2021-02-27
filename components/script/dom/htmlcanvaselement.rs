@@ -30,7 +30,7 @@ use crate::dom::webgl2renderingcontext::WebGL2RenderingContext;
 use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
 use base64;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
 use dom_struct::dom_struct;
 use euclid::default::{Rect, Size2D};

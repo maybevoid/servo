@@ -24,7 +24,7 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::textmetrics::TextMetrics;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use dom_struct::dom_struct;
 use euclid::default::{Point2D, Rect, Size2D};
 use servo_url::ServoUrl;

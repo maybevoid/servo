@@ -104,7 +104,7 @@ use crate::timer_scheduler::TimerScheduler;
 use background_hang_monitor::HangMonitorRegister;
 use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
-use canvas::canvas_session::{CanvasProtocol, CreateCanvasProtocol};
+use canvas::canvas_protocol::{CanvasProtocol, CreateCanvasProtocol};
 use canvas_traits::webgl::WebGLThreads;
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;

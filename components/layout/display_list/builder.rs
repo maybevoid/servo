@@ -32,7 +32,7 @@ use crate::inline::InlineFragmentNodeFlags;
 use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
 use app_units::{Au, AU_PER_PX};
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use embedder_traits::Cursor;
 use euclid::{
     default::{Point2D, Rect, SideOffsets2D as UntypedSideOffsets2D, Size2D},

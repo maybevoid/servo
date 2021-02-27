@@ -21,7 +21,7 @@ use crate::text::TextRunScanner;
 use crate::wrapper::ThreadSafeLayoutNodeHelpers;
 use crate::ServoArc;
 use app_units::Au;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use euclid::default::{Point2D, Rect, Size2D, Vector2D};
 use gfx::text::glyph::ByteIndex;
 use gfx::text::text_run::{TextRun, TextRunSlice};

@@ -18,7 +18,7 @@ pub mod rpc;
 pub mod wrapper_traits;
 
 use atomic_refcell::AtomicRefCell;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::CanvasSession;
 use libc::c_void;
 use net_traits::image_cache::PendingImageId;
 use script_traits::UntrustedNodeAddress;

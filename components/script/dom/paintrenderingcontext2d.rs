@@ -21,7 +21,7 @@ use crate::dom::canvaspattern::CanvasPattern;
 use crate::dom::canvasrenderingcontext2d::CanvasRenderingContext2D;
 use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use canvas_traits::canvas::CanvasImageData;
 use dom_struct::dom_struct;
 use euclid::{Scale, Size2D};

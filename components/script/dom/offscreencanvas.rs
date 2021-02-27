@@ -16,7 +16,7 @@ use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::offscreencanvasrenderingcontext2d::OffscreenCanvasRenderingContext2D;
 use crate::script_runtime::JSContext;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 use ferrite_session::prelude::*;

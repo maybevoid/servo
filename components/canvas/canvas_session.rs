@@ -2,101 +2,17 @@ use ferrite_session::prelude::*;
 
 use crate::canvas_data::*;
 use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
-use canvas_traits::canvas::*;
-use cssparser::RGBA;
-use euclid::default::{Point2D, Rect, Size2D, Transform2D};
+use euclid::default::{Rect, Size2D};
 use gfx::font_cache_thread::FontCacheThread;
 use ipc_channel::ipc::IpcSharedMemory;
 use log::info;
-use serde;
 use serde_bytes::ByteBuf;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use style::properties::style_structs::Font as FontStyleStruct;
 use tokio::{runtime, task, time};
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub enum CanvasMessage {
-    Arc(Point2D<f32>, f32, f32, f32, bool),
-    ArcTo(Point2D<f32>, Point2D<f32>, f32),
-    DrawImage(Option<ByteBuf>, Size2D<f64>, Rect<f64>, Rect<f64>, bool),
-    BeginPath,
-    BezierCurveTo(Point2D<f32>, Point2D<f32>, Point2D<f32>),
-    ClearRect(Rect<f32>),
-    Clip,
-    ClosePath,
-    Ellipse(Point2D<f32>, f32, f32, f32, f32, f32, bool),
-    Fill(FillOrStrokeStyle),
-    FillText(String, f64, f64, Option<f64>, FillOrStrokeStyle, bool),
-    FillRect(Rect<f32>, FillOrStrokeStyle),
-    LineTo(Point2D<f32>),
-    MoveTo(Point2D<f32>),
-    PutImageData(Rect<u64>, ByteBuf),
-    QuadraticCurveTo(Point2D<f32>, Point2D<f32>),
-    Rect(Rect<f32>),
-    RestoreContext,
-    SaveContext,
-    StrokeRect(Rect<f32>, FillOrStrokeStyle),
-    Stroke(FillOrStrokeStyle),
-    SetLineWidth(f32),
-    SetLineCap(LineCapStyle),
-    SetLineJoin(LineJoinStyle),
-    SetMiterLimit(f32),
-    SetGlobalAlpha(f32),
-    SetGlobalComposition(CompositionOrBlending),
-    SetTransform(Transform2D<f32>),
-    SetShadowOffsetX(f64),
-    SetShadowOffsetY(f64),
-    SetShadowBlur(f64),
-    SetShadowColor(RGBA),
-    SetFont(FontStyleStruct),
-    SetTextAlign(TextAlign),
-    SetTextBaseline(TextBaseline),
-    Recreate(Size2D<u64>),
-}
-
-define_choice! { CanvasOps;
-  Message: ReceiveValue <
-    CanvasMessage,
-    Z
-  >,
-  Messages: ReceiveValue <
-    Vec < CanvasMessage >,
-    Z
-  >,
-  GetTransform: SendValue<
-    Transform2D<f32>,
-    Z
-  >,
-  GetImageData: ReceiveValue <
-    ( Rect<u64>, Size2D<u64>),
-    SendValue <
-      ByteBuf,
-      Z
-    >
-  >,
-  IsPointInPath: ReceiveValue <
-    ( f64, f64, FillRule ),
-    SendValue <
-      bool,
-      Z
-    >
-  >,
-  FromLayout: SendValue <
-    Option<CanvasImageData>,
-    Z
-  >,
-  FromScript: SendValue <
-    IpcSharedMemory,
-    Z
-  >,
-}
-
-pub type CanvasProtocol = LinearToShared<ExternalChoice<CanvasOps>>;
-
-pub type CreateCanvasProtocol =
-    LinearToShared<ReceiveValue<(Size2D<u64>, bool), SendValue<SharedChannel<CanvasProtocol>, Z>>>;
+use crate::canvas_protocol::*;
 
 fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessage) {
     info!("handling CanvasMessage {:?}", message);
@@ -254,12 +170,12 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
     })
 }
 
-struct CanvasContext {
+struct CanvasConfig {
     webrender_api: Box<dyn WebrenderApi>,
     font_cache_thread: FontCacheThread,
 }
 
-fn run_create_canvas_session(ctx: CanvasContext) -> SharedSession<CreateCanvasProtocol> {
+fn run_create_canvas_session(ctx: CanvasConfig) -> SharedSession<CreateCanvasProtocol> {
     accept_shared_session(|| {
         receive_value(move |param| {
             let (size, antialias) = param;
@@ -291,7 +207,7 @@ pub fn create_canvas_session(
     webrender_api: Box<dyn WebrenderApi>,
     font_cache_thread: FontCacheThread,
 ) -> SharedChannel<CreateCanvasProtocol> {
-    let ctx = CanvasContext {
+    let ctx = CanvasConfig {
         webrender_api: webrender_api,
         font_cache_thread: font_cache_thread,
     };
@@ -299,13 +215,6 @@ pub fn create_canvas_session(
     let channel = run_shared_session(run_create_canvas_session(ctx));
 
     channel
-}
-
-#[derive(Clone)]
-pub struct CanvasSession {
-    runtime: Arc<runtime::Runtime>,
-    message_buffer: Arc<Mutex<Vec<CanvasMessage>>>,
-    shared_channel: SharedChannel<CanvasProtocol>,
 }
 
 impl CanvasSession {

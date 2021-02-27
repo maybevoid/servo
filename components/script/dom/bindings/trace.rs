@@ -46,10 +46,8 @@ use crate::script_runtime::{ContextForRequestInterrupt, StreamConsumer};
 use crate::script_thread::IncompleteParserContexts;
 use crate::task::TaskBox;
 use app_units::Au;
-use canvas::canvas_session::CanvasSession;
-use canvas_traits::canvas::{
-    CanvasGradientStop, LinearGradientStyle, RadialGradientStyle,
-};
+use canvas::canvas_protocol::CanvasSession;
+use canvas_traits::canvas::{CanvasGradientStop, LinearGradientStyle, RadialGradientStyle};
 use canvas_traits::canvas::{
     CompositionOrBlending, Direction, LineCapStyle, LineJoinStyle, RepetitionStyle, TextAlign,
     TextBaseline,

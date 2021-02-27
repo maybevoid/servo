@@ -26,7 +26,7 @@ use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::imagedata::ImageData;
 use crate::dom::offscreencanvas::OffscreenCanvas;
 use crate::dom::textmetrics::TextMetrics;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 

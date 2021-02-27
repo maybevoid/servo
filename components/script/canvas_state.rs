@@ -30,7 +30,7 @@ use crate::dom::node::{window_from_node, Node, NodeDamage};
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use crate::dom::textmetrics::TextMetrics;
 use crate::unpremultiplytable::UNPREMULTIPLY_TABLE;
-use canvas::canvas_session::*;
+use canvas::canvas_protocol::*;
 use canvas_traits::canvas::{CompositionOrBlending, FillOrStrokeStyle, FillRule};
 use canvas_traits::canvas::{Direction, TextAlign, TextBaseline};
 use canvas_traits::canvas::{LineCapStyle, LineJoinStyle, LinearGradientStyle};

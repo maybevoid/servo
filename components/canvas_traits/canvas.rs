@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use cssparser::RGBA;
-use euclid::default::{Size2D};
+use euclid::default::Size2D;
 use serde_bytes::ByteBuf;
 use std::default::Default;
 use std::str::FromStr;
