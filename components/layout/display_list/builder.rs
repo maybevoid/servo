@@ -38,7 +38,7 @@ use euclid::{
     default::{Point2D, Rect, SideOffsets2D as UntypedSideOffsets2D, Size2D},
     rect, SideOffsets2D,
 };
-use ferrite_session::*;
+use ferrite_session::prelude::*;
 use fnv::FnvHashMap;
 use gfx::text::glyph::ByteIndex;
 use gfx::text::TextRun;

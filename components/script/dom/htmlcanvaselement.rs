@@ -34,7 +34,7 @@ use canvas::canvas_session::*;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
 use dom_struct::dom_struct;
 use euclid::default::{Rect, Size2D};
-use ferrite_session::*;
+use ferrite_session::prelude::*;
 use html5ever::{LocalName, Prefix};
 use image::png::PngEncoder;
 use image::ColorType;

@@ -25,7 +25,7 @@ use canvas::canvas_session::*;
 use canvas_traits::canvas::CanvasImageData;
 use dom_struct::dom_struct;
 use euclid::{Scale, Size2D};
-use ferrite_session::*;
+use ferrite_session::prelude::*;
 use log::info;
 use servo_url::ServoUrl;
 use std::cell::Cell;

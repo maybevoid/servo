@@ -41,7 +41,7 @@ use euclid::{
     default::{Point2D, Rect, Size2D, Transform2D},
     vec2,
 };
-use ferrite_session::*;
+use ferrite_session::prelude::*;
 use net_traits::image_cache::{ImageCache, ImageResponse};
 use net_traits::request::CorsSettings;
 use pixels::PixelFormat;
@@ -1365,17 +1365,6 @@ impl CanvasState {
         });
 
         self.send_canvas_message(CanvasMessage::PutImageData(dst_rect, pixels));
-
-        // let shared = self.session.get_shared_channel();
-        // async_acquire_shared_session(
-        //     shared,
-        //     move |chan|
-        //         choose!(
-        //             chan,
-        //             PutImageData,
-        //             send_value_to ( chan, (dst_rect, pixels),
-        //                 release_shared_session ( chan,
-        //                         terminate () ))));
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-context-2d-drawimage

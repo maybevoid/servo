@@ -1648,7 +1648,7 @@ dependencies = [
 [[package]]
 name = "ferrite-session"
 version = "0.1.0"
-source = "git+https://github.com/ferrite-rs/ferrite#da516fdaa55b680f72479601db55f6d8c867926c"
+source = "git+https://github.com/ferrite-rs/ferrite#33434807025cb22b94f047bdc48e0f57e592780f"
 dependencies = [
  "async-macros",
  "crossbeam-channel 0.5.0",

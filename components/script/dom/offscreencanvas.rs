@@ -19,7 +19,7 @@ use crate::script_runtime::JSContext;
 use canvas::canvas_session::*;
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
-use ferrite_session::*;
+use ferrite_session::prelude::*;
 use ipc_channel::ipc::IpcSharedMemory;
 use js::rust::HandleValue;
 use std::cell::Cell;

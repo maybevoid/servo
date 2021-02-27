@@ -20,7 +20,7 @@ use devtools_traits::{ScriptToDevtoolsControlMsg, WorkerId};
 use embedder_traits::{EmbedderMsg, MediaSessionEvent};
 use euclid::default::Size2D as UntypedSize2D;
 use euclid::Size2D;
-use ferrite_session::*;
+use ferrite_session::prelude::*;
 use gfx_traits::Epoch;
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use msg::constellation_msg::{

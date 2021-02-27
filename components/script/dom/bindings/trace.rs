@@ -71,7 +71,7 @@ use embedder_traits::{EventLoopWaker, MediaMetadata};
 use encoding_rs::{Decoder, Encoding};
 use euclid::default::{Point2D, Rect, Rotation3D, Transform2D};
 use euclid::Length as EuclidLength;
-use ferrite_session::{SharedChannel, SharedProtocol};
+use ferrite_session::prelude::{SharedChannel, SharedProtocol};
 use html5ever::buffer_queue::BufferQueue;
 use html5ever::{LocalName, Namespace, Prefix, QualName};
 use http::header::HeaderMap;
