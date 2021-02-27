@@ -33,6 +33,7 @@ use crate::model::MaybeAuto;
 use crate::table_cell::CollapsedBordersForCell;
 use app_units::{Au, AU_PER_PX};
 use canvas::canvas_protocol::*;
+use canvas::runtime::block_on;
 use embedder_traits::Cursor;
 use euclid::{
     default::{Point2D, Rect, SideOffsets2D as UntypedSideOffsets2D, Size2D},
@@ -1911,23 +1912,22 @@ impl Fragment {
                         Some(ref session) => {
                             info!("builder.rs build_fragment_type_specific_display_items");
                             let shared = session.get_shared_channel();
-                            let res = session
-                                .block_on(async_acquire_shared_session_with_result(
-                                    shared,
-                                    move |chan| {
-                                        choose!(
-                                            chan,
-                                            FromLayout,
-                                            receive_value_from(chan, move |data| {
-                                                release_shared_session(
-                                                    chan,
-                                                    send_value(data, terminate()),
-                                                )
-                                            })
-                                        )
-                                    },
-                                ))
-                                .unwrap();
+                            let res = block_on(async_acquire_shared_session_with_result(
+                                shared,
+                                move |chan| {
+                                    choose!(
+                                        chan,
+                                        FromLayout,
+                                        receive_value_from(chan, move |data| {
+                                            release_shared_session(
+                                                chan,
+                                                send_value(data, terminate()),
+                                            )
+                                        })
+                                    )
+                                },
+                            ))
+                            .unwrap();
                             info!("build_fragment_type_specific_display_items done");
                             match res {
                                 Some(data) => data.image_key,

@@ -9,6 +9,8 @@
 extern crate bitflags;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 mod raqote_backend;
 
@@ -18,6 +20,7 @@ pub mod canvas_data;
 pub mod canvas_paint_thread;
 pub mod canvas_protocol;
 pub mod canvas_session;
+pub mod runtime;
 mod webgl_limits;
 mod webgl_mode;
 pub mod webgl_thread;

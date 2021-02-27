@@ -31,6 +31,7 @@ use crate::dom::webglrenderingcontext::WebGLRenderingContext;
 use crate::script_runtime::JSContext;
 use base64;
 use canvas::canvas_protocol::*;
+use canvas::runtime::block_on;
 use canvas_traits::webgl::{GLContextAttributes, WebGLVersion};
 use dom_struct::dom_struct;
 use euclid::default::{Rect, Size2D};
@@ -300,21 +301,20 @@ impl HTMLCanvasElement {
                 let session = context.get_canvas_session();
                 let shared = session.get_shared_channel();
 
-                let res = session
-                    .block_on(async_acquire_shared_session_with_result(
-                        shared,
-                        move |chan| {
-                            choose!(
+                let res = block_on(async_acquire_shared_session_with_result(
+                    shared,
+                    move |chan| {
+                        choose!(
+                            chan,
+                            FromScript,
+                            receive_value_from(chan, move |data| release_shared_session(
                                 chan,
-                                FromScript,
-                                receive_value_from(chan, move |data| release_shared_session(
-                                    chan,
-                                    send_value(data, terminate())
-                                ))
-                            )
-                        },
-                    ))
-                    .unwrap();
+                                send_value(data, terminate())
+                            ))
+                        )
+                    },
+                ))
+                .unwrap();
 
                 Some(res)
             },

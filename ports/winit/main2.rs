@@ -33,7 +33,6 @@ use std::io::Write;
 use std::panic;
 use std::process;
 use std::thread;
-use tokio::runtime;
 
 pub mod platform {
     #[cfg(target_os = "macos")]
@@ -160,13 +159,6 @@ pub async fn main() {
     });
 
     let user_agent = opts_matches.opt_str("u");
-
-    let runtime = runtime::Builder::new_multi_thread()
-      .enable_time()
-      .build()
-      .unwrap();
-
-    let _guard = runtime.enter();
 
     App::run(do_not_use_native_titlebar, device_pixels_per_px, user_agent);
 

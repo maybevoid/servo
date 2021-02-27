@@ -8,7 +8,6 @@ use serde;
 use serde_bytes::ByteBuf;
 use std::sync::{Arc, Mutex};
 use style::properties::style_structs::Font as FontStyleStruct;
-use tokio::runtime;
 
 pub type CanvasProtocol = LinearToShared<ExternalChoice<CanvasOps>>;
 
@@ -17,7 +16,6 @@ pub type CreateCanvasProtocol =
 
 #[derive(Clone)]
 pub struct CanvasSession {
-    pub(crate) runtime: Arc<runtime::Runtime>,
     pub(crate) message_buffer: Arc<Mutex<Vec<CanvasMessage>>>,
     pub(crate) shared_channel: SharedChannel<CanvasProtocol>,
 }

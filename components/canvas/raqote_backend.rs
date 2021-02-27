@@ -14,7 +14,6 @@ use cssparser::RGBA;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D, Vector2D};
 use euclid::Angle;
 use font_kit::font::Font;
-use log::info;
 use lyon_geom::Arc;
 use raqote::PathOp;
 use std::marker::PhantomData;
@@ -363,14 +362,12 @@ impl GenericDrawTarget for raqote::DrawTarget {
         let mut options = raqote::DrawOptions::new();
         options.blend_mode = raqote::BlendMode::Clear;
         let pattern = Pattern::Color(0, 0, 0, 0);
-        info!("calling GenericDrawTarget::fill");
         GenericDrawTarget::fill(
             self,
             &Path::Raqote(pb.finish()),
             canvas_data::Pattern::Raqote(pattern),
             &DrawOptions::Raqote(options),
         );
-        info!("done GenericDrawTarget::fill");
     }
     #[allow(unsafe_code)]
     fn copy_surface(
@@ -484,7 +481,6 @@ impl GenericDrawTarget for raqote::DrawTarget {
     fn fill(&mut self, path: &Path, pattern: canvas_data::Pattern, draw_options: &DrawOptions) {
         match draw_options.as_raqote().blend_mode {
             raqote::BlendMode::Src => {
-                info!("fill Src");
                 self.clear(raqote::SolidSource::from_unpremultiplied_argb(0, 0, 0, 0));
                 self.fill(
                     path.as_raqote(),
@@ -499,7 +495,6 @@ impl GenericDrawTarget for raqote::DrawTarget {
             raqote::BlendMode::Xor |
             raqote::BlendMode::DstOver |
             raqote::BlendMode::SrcOver => {
-                info!("fill SrcOver");
                 raqote::DrawTarget::fill(
                     self,
                     path.as_raqote(),
@@ -511,7 +506,6 @@ impl GenericDrawTarget for raqote::DrawTarget {
             raqote::BlendMode::SrcOut |
             raqote::BlendMode::DstIn |
             raqote::BlendMode::DstAtop => {
-                info!("fill DstAtop");
                 let mut options = draw_options.as_raqote().clone();
                 self.push_layer_with_blend(1., options.blend_mode);
                 options.blend_mode = raqote::BlendMode::SrcOver;

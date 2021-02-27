@@ -31,6 +31,7 @@ use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use crate::dom::textmetrics::TextMetrics;
 use crate::unpremultiplytable::UNPREMULTIPLY_TABLE;
 use canvas::canvas_protocol::*;
+use canvas::runtime::block_on;
 use canvas_traits::canvas::{CompositionOrBlending, FillOrStrokeStyle, FillRule};
 use canvas_traits::canvas::{Direction, TextAlign, TextBaseline};
 use canvas_traits::canvas::{LineCapStyle, LineJoinStyle, LinearGradientStyle};
@@ -326,26 +327,24 @@ impl CanvasState {
 
         let shared = self.session.get_shared_channel();
 
-        let data = self
-            .session
-            .block_on(async_acquire_shared_session_with_result(
-                shared,
-                move |chan| {
-                    choose!(
+        let data = block_on(async_acquire_shared_session_with_result(
+            shared,
+            move |chan| {
+                choose!(
+                    chan,
+                    GetImageData,
+                    send_value_to(
                         chan,
-                        GetImageData,
-                        send_value_to(
+                        (rect, canvas_size),
+                        receive_value_from(chan, move |data| release_shared_session(
                             chan,
-                            (rect, canvas_size),
-                            receive_value_from(chan, move |data| release_shared_session(
-                                chan,
-                                send_value(data, terminate())
-                            ))
-                        )
+                            send_value(data, terminate())
+                        ))
                     )
-                },
-            ))
-            .unwrap();
+                )
+            },
+        ))
+        .unwrap();
 
         let mut pixels = data.into_vec();
 
@@ -1491,26 +1490,24 @@ impl CanvasState {
 
         debug!("[is_point_in_path] acquiring shared session");
         let shared = self.session.get_shared_channel();
-        let res = self
-            .session
-            .block_on(async_acquire_shared_session_with_result(
-                shared,
-                move |chan| {
-                    choose!(
+        let res = block_on(async_acquire_shared_session_with_result(
+            shared,
+            move |chan| {
+                choose!(
+                    chan,
+                    IsPointInPath,
+                    send_value_to(
                         chan,
-                        IsPointInPath,
-                        send_value_to(
+                        (x, y, fill_rule),
+                        receive_value_from(chan, move |result| release_shared_session(
                             chan,
-                            (x, y, fill_rule),
-                            receive_value_from(chan, move |result| release_shared_session(
-                                chan,
-                                send_value(result, terminate())
-                            ))
-                        )
+                            send_value(result, terminate())
+                        ))
                     )
-                },
-            ))
-            .unwrap();
+                )
+            },
+        ))
+        .unwrap();
 
         debug!("[is_point_in_path] released shared session");
         res
@@ -1580,22 +1577,20 @@ impl CanvasState {
     pub fn get_transform(&self, global: &GlobalScope) -> DomRoot<DOMMatrix> {
         debug!("[get_transform] acquiring shared session");
         let shared = self.session.get_shared_channel();
-        let transform = self
-            .session
-            .block_on(async_acquire_shared_session_with_result(
-                shared,
-                move |chan| {
-                    choose!(
+        let transform = block_on(async_acquire_shared_session_with_result(
+            shared,
+            move |chan| {
+                choose!(
+                    chan,
+                    GetTransform,
+                    receive_value_from(chan, move |transform| release_shared_session(
                         chan,
-                        GetTransform,
-                        receive_value_from(chan, move |transform| release_shared_session(
-                            chan,
-                            send_value(transform, terminate())
-                        ))
-                    )
-                },
-            ))
-            .unwrap();
+                        send_value(transform, terminate())
+                    ))
+                )
+            },
+        ))
+        .unwrap();
         debug!("[get_transform] released shared session");
 
         DOMMatrix::new(global, true, transform.cast::<f64>().to_3d())

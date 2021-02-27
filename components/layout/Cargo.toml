@@ -15,7 +15,6 @@ doctest = false
 [dependencies]
 app_units = "0.7"
 atomic_refcell = "0.1"
-tokio = { version = "1.1.1", features = [ "full" ] }
 bitflags = "1.0"
 canvas= { path = "../canvas" }
 canvas_traits = { path = "../canvas_traits" }

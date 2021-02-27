@@ -7,10 +7,9 @@ use gfx::font_cache_thread::FontCacheThread;
 use ipc_channel::ipc::IpcSharedMemory;
 use log::info;
 use serde_bytes::ByteBuf;
-use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::{runtime, task, time};
+use tokio::{task, time};
 
 use crate::canvas_protocol::*;
 
@@ -222,12 +221,6 @@ impl CanvasSession {
         CanvasSession {
             shared_channel,
             message_buffer: Arc::new(Mutex::new(vec![])),
-            runtime: Arc::new(
-                runtime::Builder::new_multi_thread()
-                    .enable_time()
-                    .build()
-                    .unwrap(),
-            ),
         }
     }
 
@@ -257,10 +250,6 @@ impl CanvasSession {
     pub fn get_shared_channel(&self) -> SharedChannel<CanvasProtocol> {
         self.flush_messages();
         self.shared_channel.clone()
-    }
-
-    pub fn block_on<F: Future>(&self, future: F) -> F::Output {
-        self.runtime.block_on(future)
     }
 }
 

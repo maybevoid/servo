@@ -22,6 +22,7 @@ use crate::dom::canvasrenderingcontext2d::CanvasRenderingContext2D;
 use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use canvas::canvas_protocol::*;
+use canvas::runtime::block_on;
 use canvas_traits::canvas::CanvasImageData;
 use dom_struct::dom_struct;
 use euclid::{Scale, Size2D};
@@ -58,21 +59,20 @@ impl PaintRenderingContext2D {
         info!("paintrenderingcontext2d.rs send_data");
         let session = self.context.get_canvas_session();
         let shared = session.get_shared_channel();
-        let res = session
-            .block_on(async_acquire_shared_session_with_result(
-                shared,
-                move |chan| {
-                    choose!(
+        let res = block_on(async_acquire_shared_session_with_result(
+            shared,
+            move |chan| {
+                choose!(
+                    chan,
+                    FromLayout,
+                    receive_value_from(chan, move |res| release_shared_session(
                         chan,
-                        FromLayout,
-                        receive_value_from(chan, move |res| release_shared_session(
-                            chan,
-                            send_value(res, terminate())
-                        ))
-                    )
-                },
-            ))
-            .unwrap();
+                        send_value(res, terminate())
+                    ))
+                )
+            },
+        ))
+        .unwrap();
 
         info!("send_data done");
         res

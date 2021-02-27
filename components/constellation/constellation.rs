@@ -105,6 +105,7 @@ use background_hang_monitor::HangMonitorRegister;
 use backtrace::Backtrace;
 use bluetooth_traits::BluetoothRequest;
 use canvas::canvas_protocol::{CanvasProtocol, CreateCanvasProtocol};
+use canvas::runtime::{block_on, RUNTIME};
 use canvas_traits::webgl::WebGLThreads;
 use compositing::compositor_thread::CompositorProxy;
 use compositing::compositor_thread::Msg as ToCompositorMsg;
@@ -181,7 +182,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use style_traits::viewport::ViewportConstraints;
 use style_traits::CSSPixel;
-use tokio::runtime;
 use webgpu::{self, WebGPU, WebGPURequest};
 use webrender_traits::WebrenderExternalImageRegistry;
 
@@ -479,7 +479,6 @@ pub struct Constellation<Message, LTF, STF, SWF> {
     /// The XR device registry
     webxr_registry: webxr_api::Registry,
 
-    runtime: Arc<runtime::Runtime>,
     canvas_session: SharedChannel<CreateCanvasProtocol>,
 
     /// Navigation requests from script awaiting approval from the embedder.
@@ -848,13 +847,6 @@ where
                     wgpu_image_map: state.wgpu_image_map,
                 };
 
-                let runtime = Arc::new(
-                    runtime::Builder::new_multi_thread()
-                        .enable_time()
-                        .build()
-                        .unwrap(),
-                );
-
                 let mut constellation: Constellation<Message, LTF, STF, SWF> = Constellation {
                     namespace_receiver,
                     namespace_sender,
@@ -921,7 +913,6 @@ where
                     }),
                     webgl_threads: state.webgl_threads,
                     webxr_registry: state.webxr_registry,
-                    runtime: runtime.clone(),
                     canvas_session,
                     pending_approval_navigations: HashMap::new(),
                     pressed_mouse_buttons: 0,
@@ -935,7 +926,7 @@ where
                     user_agent: state.user_agent,
                 };
 
-                let _guard = runtime.enter();
+                let _guard = RUNTIME.enter();
 
                 constellation.run();
             })
@@ -1832,13 +1823,10 @@ where
                     warn!("Error replying to remove iframe ({})", e);
                 }
             },
-            FromScriptMsg::CreateCanvasPaintThread(size, sender) => {
-                let runtime = self.runtime.clone();
-                runtime.block_on(async move {
-                    self.handle_create_canvas_paint_thread_msg(size, sender)
-                        .await
-                })
-            },
+            FromScriptMsg::CreateCanvasPaintThread(size, sender) => block_on(async move {
+                self.handle_create_canvas_paint_thread_msg(size, sender)
+                    .await
+            }),
             FromScriptMsg::SetDocumentState(state) => {
                 self.document_states.insert(source_pipeline_id, state);
             },
