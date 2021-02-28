@@ -64,7 +64,8 @@ pub mod document_loader;
 #[warn(deprecated)]
 #[macro_use]
 mod dom;
-pub mod canvas_state;
+#[warn(deprecated)]
+mod canvas_state;
 mod euclidext;
 #[warn(deprecated)]
 pub mod fetch;

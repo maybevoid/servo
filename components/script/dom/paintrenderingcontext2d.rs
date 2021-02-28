@@ -27,7 +27,6 @@ use canvas_traits::canvas::CanvasImageData;
 use dom_struct::dom_struct;
 use euclid::{Scale, Size2D};
 use ferrite_session::prelude::*;
-use log::info;
 use servo_url::ServoUrl;
 use std::cell::Cell;
 use style_traits::CSSPixel;
@@ -56,10 +55,9 @@ impl PaintRenderingContext2D {
     }
 
     pub fn get_data(&self) -> Option<CanvasImageData> {
-        info!("paintrenderingcontext2d.rs send_data");
         let session = self.context.get_canvas_session();
         let shared = session.get_shared_channel();
-        let res = block_on(async_acquire_shared_session_with_result(
+        block_on(async_acquire_shared_session_with_result(
             shared,
             move |chan| {
                 choose!(
@@ -72,10 +70,7 @@ impl PaintRenderingContext2D {
                 )
             },
         ))
-        .unwrap();
-
-        info!("send_data done");
-        res
+        .unwrap()
     }
 
     pub fn take_missing_image_urls(&self) -> Vec<ServoUrl> {

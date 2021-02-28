@@ -44,7 +44,6 @@ use fnv::FnvHashMap;
 use gfx::text::glyph::ByteIndex;
 use gfx::text::TextRun;
 use gfx_traits::{combine_id_with_fragment_type, FragmentType, StackingContextId};
-use log::info;
 use msg::constellation_msg::PipelineId;
 use net_traits::image_cache::UsePlaceholder;
 use range::Range;
@@ -1910,7 +1909,6 @@ impl Fragment {
                     CanvasFragmentSource::WebGPU(image_key) => image_key,
                     CanvasFragmentSource::Image(ref ctx) => match *ctx {
                         Some(ref session) => {
-                            info!("builder.rs build_fragment_type_specific_display_items");
                             let shared = session.get_shared_channel();
                             let res = block_on(async_acquire_shared_session_with_result(
                                 shared,
@@ -1928,7 +1926,6 @@ impl Fragment {
                                 },
                             ))
                             .unwrap();
-                            info!("build_fragment_type_specific_display_items done");
                             match res {
                                 Some(data) => data.image_key,
                                 None => return,

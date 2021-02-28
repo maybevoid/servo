@@ -5,7 +5,6 @@ use crate::canvas_paint_thread::{AntialiasMode, WebrenderApi};
 use euclid::default::{Rect, Size2D};
 use gfx::font_cache_thread::FontCacheThread;
 use ipc_channel::ipc::IpcSharedMemory;
-use log::info;
 use serde_bytes::ByteBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -14,7 +13,6 @@ use tokio::{task, time};
 use crate::canvas_protocol::*;
 
 fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessage) {
-    info!("handling CanvasMessage {:?}", message);
     match message {
         CanvasMessage::FillText(text, x, y, max_width, style, is_rtl) => {
             canvas.set_fill_style(style);
@@ -29,9 +27,7 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
             canvas.stroke_rect(&rect);
         },
         CanvasMessage::ClearRect(ref rect) => {
-            info!("calling clear_rect");
             canvas.clear_rect(rect);
-            info!("clear_rect done");
         },
         CanvasMessage::BeginPath => canvas.begin_path(),
         CanvasMessage::ClosePath => canvas.close_path(),
@@ -92,8 +88,6 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
             canvas.recreate(size);
         },
     }
-
-    info!("done handling CanvasMessage");
 }
 
 fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtocol> {
@@ -109,7 +103,6 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
           },
           Messages => {
             receive_value ( move | messages | {
-              info!("handling CanvasMessages {:?}", messages);
               for message in messages {
                 handle_canvas_message (&mut canvas, message);
               }
@@ -120,7 +113,6 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
             })
           },
           GetTransform => {
-            info!("GetTransform");
             let transform = canvas.get_transform();
             send_value ( transform,
               detach_shared_session (
@@ -128,7 +120,6 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
               ))
           },
           GetImageData => {
-            info!("GetImageData");
             receive_value ( move | (dest_rect, canvas_size) | {
               let pixels = canvas.read_pixels(dest_rect, canvas_size);
 
@@ -139,7 +130,6 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
             })
           },
           IsPointInPath => {
-            info!("IsPointInPath");
             receive_value ( move | msg | {
               let (x, y, fill_rule) = msg;
               let res = canvas.is_point_in_path_bool(x, y, fill_rule);
@@ -151,14 +141,12 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
             })
           },
           FromLayout => {
-            info!("FromLayout");
             send_value ( canvas.get_data(),
               detach_shared_session (
                 run_canvas_session ( canvas )
               ))
           },
           FromScript => {
-            info!("FromScript");
             let bytes = canvas.get_pixels();
             send_value( IpcSharedMemory::from_bytes(&bytes),
               detach_shared_session (
@@ -227,7 +215,6 @@ impl CanvasSession {
     pub fn flush_messages(&self) {
         let mut messages = self.message_buffer.lock().unwrap();
         if !messages.is_empty() {
-            info!("flushing {} messages", messages.len());
             let messages2 = messages.split_off(0);
             send_canvas_messages(self.shared_channel.clone(), messages2);
         }

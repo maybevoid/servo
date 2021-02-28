@@ -4389,8 +4389,6 @@ where
         ))
         .await;
 
-        debug!("created canvas");
-
         response_sender.send(canvas).unwrap();
     }
 

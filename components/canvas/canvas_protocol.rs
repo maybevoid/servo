@@ -61,38 +61,13 @@ pub enum CanvasMessage {
 }
 
 define_choice! { CanvasOps;
-  Message: ReceiveValue <
-    CanvasMessage,
-    Z
-  >,
-  Messages: ReceiveValue <
-    Vec < CanvasMessage >,
-    Z
-  >,
-  GetTransform: SendValue<
-    Transform2D<f32>,
-    Z
-  >,
-  GetImageData: ReceiveValue <
-    ( Rect<u64>, Size2D<u64>),
-    SendValue <
-      ByteBuf,
-      Z
-    >
-  >,
-  IsPointInPath: ReceiveValue <
-    ( f64, f64, FillRule ),
-    SendValue <
-      bool,
-      Z
-    >
-  >,
-  FromLayout: SendValue <
-    Option<CanvasImageData>,
-    Z
-  >,
-  FromScript: SendValue <
-    IpcSharedMemory,
-    Z
-  >,
+  Message: ReceiveValue < CanvasMessage, Z >,
+  Messages: ReceiveValue < Vec < CanvasMessage >, Z >,
+  GetTransform: SendValue< Transform2D<f32>, Z >,
+  GetImageData: ReceiveValue < ( Rect<u64>, Size2D<u64>),
+    SendValue < ByteBuf, Z > >,
+  IsPointInPath: ReceiveValue < ( f64, f64, FillRule ),
+    SendValue < bool, Z > >,
+  FromLayout: SendValue < Option<CanvasImageData>, Z >,
+  FromScript: SendValue < IpcSharedMemory, Z >,
 }
