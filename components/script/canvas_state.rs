@@ -23,14 +23,15 @@ use crate::dom::dommatrix::DOMMatrix;
 use crate::dom::element::cors_setting_for_element;
 use crate::dom::element::Element;
 use crate::dom::globalscope::GlobalScope;
-use crate::dom::htmlcanvaselement::HTMLCanvasElement;
+use crate::dom::htmlcanvaselement::{CanvasContext, HTMLCanvasElement};
 use crate::dom::imagedata::ImageData;
 use crate::dom::node::{window_from_node, Node, NodeDamage};
-// use crate::dom::offscreencanvas::{OffscreenCanvas, OffscreenCanvasContext};
+use crate::dom::offscreencanvas::{OffscreenCanvas, OffscreenCanvasContext};
 use crate::dom::paintworkletglobalscope::PaintWorkletGlobalScope;
 use crate::dom::textmetrics::TextMetrics;
 use crate::unpremultiplytable::UNPREMULTIPLY_TABLE;
 use canvas::canvas_protocol::*;
+use canvas::canvas_session::draw_image_in_other;
 use canvas::runtime::block_on;
 use canvas_traits::canvas::{CompositionOrBlending, FillOrStrokeStyle, FillRule};
 use canvas_traits::canvas::{Direction, TextAlign, TextBaseline};
@@ -399,8 +400,7 @@ impl CanvasState {
                     return Err(Error::InvalidState);
                 }
 
-                Err(Error::InvalidState)
-                // self.draw_html_canvas_element(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
+                self.draw_html_canvas_element(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
             },
             CanvasImageSource::OffscreenCanvas(ref canvas) => {
                 // https://html.spec.whatwg.org/multipage/#check-the-usability-of-the-image-argument
@@ -408,8 +408,7 @@ impl CanvasState {
                     return Err(Error::InvalidState);
                 }
 
-                Err(Error::InvalidState)
-                // self.draw_offscreen_canvas(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
+                self.draw_offscreen_canvas(&canvas, htmlcanvas, sx, sy, sw, sh, dx, dy, dw, dh)
             },
             CanvasImageSource::HTMLImageElement(ref image) => {
                 // https://html.spec.whatwg.org/multipage/#drawing-images
@@ -455,123 +454,129 @@ impl CanvasState {
         result
     }
 
-    // fn draw_offscreen_canvas(
-    //     &self,
-    //     canvas: &OffscreenCanvas,
-    //     htmlcanvas: Option<&HTMLCanvasElement>,
-    //     sx: f64,
-    //     sy: f64,
-    //     sw: Option<f64>,
-    //     sh: Option<f64>,
-    //     dx: f64,
-    //     dy: f64,
-    //     dw: Option<f64>,
-    //     dh: Option<f64>,
-    // ) -> ErrorResult {
-    //     let canvas_size = canvas.get_size();
-    //     let dw = dw.unwrap_or(canvas_size.width as f64);
-    //     let dh = dh.unwrap_or(canvas_size.height as f64);
-    //     let sw = sw.unwrap_or(canvas_size.width as f64);
-    //     let sh = sh.unwrap_or(canvas_size.height as f64);
+    fn draw_offscreen_canvas(
+        &self,
+        canvas: &OffscreenCanvas,
+        htmlcanvas: Option<&HTMLCanvasElement>,
+        sx: f64,
+        sy: f64,
+        sw: Option<f64>,
+        sh: Option<f64>,
+        dx: f64,
+        dy: f64,
+        dw: Option<f64>,
+        dh: Option<f64>,
+    ) -> ErrorResult {
+        let canvas_size = canvas.get_size();
+        let dw = dw.unwrap_or(canvas_size.width as f64);
+        let dh = dh.unwrap_or(canvas_size.height as f64);
+        let sw = sw.unwrap_or(canvas_size.width as f64);
+        let sh = sh.unwrap_or(canvas_size.height as f64);
 
-    //     let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
-    //     // 2. Establish the source and destination rectangles
-    //     let (source_rect, dest_rect) =
-    //         self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
+        let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
+        // 2. Establish the source and destination rectangles
+        let (source_rect, dest_rect) =
+            self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
 
-    //     if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
-    //         return Ok(());
-    //     }
+        if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
+            return Ok(());
+        }
 
-    //     let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
+        let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
 
-    //     if let Some(context) = canvas.context() {
-    //         match *context {
-    //             OffscreenCanvasContext::OffscreenContext2d(ref context) => {
-    //                 context.send_canvas_2d_msg(Canvas2dMsg::DrawImageInOther(
-    //                     self.get_canvas_id(),
-    //                     image_size,
-    //                     dest_rect,
-    //                     source_rect,
-    //                     smoothing_enabled,
-    //                 ));
-    //             },
-    //         }
-    //     } else {
-    //         self.send_canvas_message(CanvasMessage::DrawImage(
-    //             None,
-    //             image_size,
-    //             dest_rect,
-    //             source_rect,
-    //             smoothing_enabled,
-    //         ));
-    //     }
+        if let Some(context) = canvas.context() {
+            match *context {
+                OffscreenCanvasContext::OffscreenContext2d(ref context) => {
+                    let source = self.session.get_shared_channel();
+                    let target = context.get_canvas_session().get_shared_channel();
+                    block_on(draw_image_in_other(
+                        source,
+                        target,
+                        image_size,
+                        dest_rect,
+                        source_rect,
+                        smoothing_enabled,
+                    ));
+                },
+            }
+        } else {
+            self.send_canvas_message(CanvasMessage::DrawImage(
+                None,
+                image_size,
+                dest_rect,
+                source_rect,
+                smoothing_enabled,
+            ));
+        }
 
-    //     self.mark_as_dirty(htmlcanvas);
-    //     Ok(())
-    // }
+        self.mark_as_dirty(htmlcanvas);
+        Ok(())
+    }
 
-    // fn draw_html_canvas_element(
-    //     &self,
-    //     canvas: &HTMLCanvasElement,             // source canvas
-    //     htmlcanvas: Option<&HTMLCanvasElement>, // destination canvas
-    //     sx: f64,
-    //     sy: f64,
-    //     sw: Option<f64>,
-    //     sh: Option<f64>,
-    //     dx: f64,
-    //     dy: f64,
-    //     dw: Option<f64>,
-    //     dh: Option<f64>,
-    // ) -> ErrorResult {
-    //     // 1. Check the usability of the image argument
-    //     if !canvas.is_valid() {
-    //         return Err(Error::InvalidState);
-    //     }
+    fn draw_html_canvas_element(
+        &self,
+        canvas: &HTMLCanvasElement,             // source canvas
+        htmlcanvas: Option<&HTMLCanvasElement>, // destination canvas
+        sx: f64,
+        sy: f64,
+        sw: Option<f64>,
+        sh: Option<f64>,
+        dx: f64,
+        dy: f64,
+        dw: Option<f64>,
+        dh: Option<f64>,
+    ) -> ErrorResult {
+        // 1. Check the usability of the image argument
+        if !canvas.is_valid() {
+            return Err(Error::InvalidState);
+        }
 
-    //     let canvas_size = canvas.get_size();
-    //     let dw = dw.unwrap_or(canvas_size.width as f64);
-    //     let dh = dh.unwrap_or(canvas_size.height as f64);
-    //     let sw = sw.unwrap_or(canvas_size.width as f64);
-    //     let sh = sh.unwrap_or(canvas_size.height as f64);
+        let canvas_size = canvas.get_size();
+        let dw = dw.unwrap_or(canvas_size.width as f64);
+        let dh = dh.unwrap_or(canvas_size.height as f64);
+        let sw = sw.unwrap_or(canvas_size.width as f64);
+        let sh = sh.unwrap_or(canvas_size.height as f64);
 
-    //     let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
-    //     // 2. Establish the source and destination rectangles
-    //     let (source_rect, dest_rect) =
-    //         self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
+        let image_size = Size2D::new(canvas_size.width as f64, canvas_size.height as f64);
+        // 2. Establish the source and destination rectangles
+        let (source_rect, dest_rect) =
+            self.adjust_source_dest_rects(image_size, sx, sy, sw, sh, dx, dy, dw, dh);
 
-    //     if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
-    //         return Ok(());
-    //     }
+        if !is_rect_valid(source_rect) || !is_rect_valid(dest_rect) {
+            return Ok(());
+        }
 
-    //     let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
+        let smoothing_enabled = self.state.borrow().image_smoothing_enabled;
 
-    //     if let Some(context) = canvas.context() {
-    //         match *context {
-    //             CanvasContext::Context2d(ref context) => {
-    //                 context.send_canvas_message(CanvasMessage::DrawImageInOther(
-    //                     self.get_canvas_id(),
-    //                     image_size,
-    //                     dest_rect,
-    //                     source_rect,
-    //                     smoothing_enabled,
-    //                 ));
-    //             },
-    //             _ => return Err(Error::InvalidState),
-    //         }
-    //     } else {
-    //         self.send_canvas_message(CanvasMessage::DrawImage(
-    //             None,
-    //             image_size,
-    //             dest_rect,
-    //             source_rect,
-    //             smoothing_enabled,
-    //         ));
-    //     }
+        if let Some(context) = canvas.context() {
+            match *context {
+                CanvasContext::Context2d(ref context) => {
+                    let source = self.session.get_shared_channel();
+                    let target = context.get_canvas_session().get_shared_channel();
+                    block_on(draw_image_in_other(
+                        source,
+                        target,
+                        image_size,
+                        dest_rect,
+                        source_rect,
+                        smoothing_enabled,
+                    ));
+                },
+                _ => return Err(Error::InvalidState),
+            }
+        } else {
+            self.send_canvas_message(CanvasMessage::DrawImage(
+                None,
+                image_size,
+                dest_rect,
+                source_rect,
+                smoothing_enabled,
+            ));
+        }
 
-    //     self.mark_as_dirty(htmlcanvas);
-    //     Ok(())
-    // }
+        self.mark_as_dirty(htmlcanvas);
+        Ok(())
+    }
 
     fn fetch_and_draw_image_data(
         &self,
