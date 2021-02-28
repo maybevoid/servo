@@ -1646,8 +1646,9 @@ dependencies = [
 
 [[package]]
 name = "ferrite-session"
-version = "0.1.0"
-source = "git+https://github.com/ferrite-rs/ferrite#33434807025cb22b94f047bdc48e0f57e592780f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0eb5758febda39706c94fdd374d46166cd7b5bfd2b892d7cebbebb576480caa"
 dependencies = [
  "async-macros",
  "crossbeam-channel 0.5.0",
