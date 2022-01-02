@@ -11,8 +11,7 @@ use crate::parser::{Parse, ParserContext};
 use crate::Zero;
 use cssparser::Parser;
 use std::ops::Add;
-use style_traits::{KeywordsCollectFn, ParseError};
-use style_traits::{SpecifiedValueInfo, StyleParseErrorKind};
+use style_traits::{KeywordsCollectFn, ParseError, SpecifiedValueInfo, StyleParseErrorKind};
 
 pub mod background;
 pub mod basic_shape;
@@ -31,7 +30,9 @@ pub mod grid;
 pub mod image;
 pub mod length;
 pub mod motion;
+pub mod page;
 pub mod position;
+pub mod ratio;
 pub mod rect;
 pub mod size;
 pub mod svg;
@@ -135,7 +136,7 @@ impl SpecifiedValueInfo for CounterStyle {
         // approach here.
         macro_rules! predefined {
             ($($name:expr,)+) => {
-                f(&["symbols", $($name,)+]);
+                f(&["symbols", $($name,)+])
             }
         }
         include!("../../counter_style/predefined.rs");
@@ -292,3 +293,5 @@ impl<L> ClipRectOrAuto<L> {
         matches!(*self, ClipRectOrAuto::Auto)
     }
 }
+
+pub use page::PageSize;

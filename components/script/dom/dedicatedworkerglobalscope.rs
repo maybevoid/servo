@@ -53,7 +53,7 @@ use net_traits::IpcSend;
 use parking_lot::Mutex;
 use script_traits::{WorkerGlobalScopeInit, WorkerScriptLoadOrigin};
 use servo_rand::random;
-use servo_url::ServoUrl;
+use servo_url::{ImmutableOrigin, ServoUrl};
 use std::mem::replace;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -310,7 +310,7 @@ impl DedicatedWorkerGlobalScope {
     #[allow(unsafe_code)]
     // https://html.spec.whatwg.org/multipage/#run-a-worker
     pub fn run_worker_scope(
-        init: WorkerGlobalScopeInit,
+        mut init: WorkerGlobalScopeInit,
         worker_url: ServoUrl,
         from_devtools_receiver: IpcReceiver<DevtoolScriptControlMsg>,
         worker: TrustedWorkerAddress,
@@ -328,7 +328,6 @@ impl DedicatedWorkerGlobalScope {
         context_sender: Sender<ContextForRequestInterrupt>,
     ) -> JoinHandle<()> {
         let serialized_worker_url = worker_url.to_string();
-        let name = format!("WebWorker for {}", serialized_worker_url);
         let top_level_browsing_context_id = TopLevelBrowsingContextId::installed();
         let current_global = GlobalScope::current().expect("No current global object");
         let origin = current_global.origin().immutable().clone();
@@ -337,7 +336,7 @@ impl DedicatedWorkerGlobalScope {
         let current_global_https_state = current_global.get_https_state();
 
         thread::Builder::new()
-            .name(name)
+            .name(format!("WW:{}", worker_url.debug_compact()))
             .spawn(move || {
                 thread_state::initialize(ThreadState::SCRIPT | ThreadState::IN_WORKER);
 
@@ -386,6 +385,17 @@ impl DedicatedWorkerGlobalScope {
                     from_devtools_receiver,
                     devtools_mpsc_chan,
                 );
+
+                // Step 8 "Set up a worker environment settings object [...]"
+                //
+                // <https://html.spec.whatwg.org/multipage/#script-settings-for-workers>
+                //
+                // > The origin: Return a unique opaque origin if `worker global
+                // > scope`'s url's scheme is "data", and `inherited origin`
+                // > otherwise.
+                if worker_url.scheme() == "data" {
+                    init.origin = ImmutableOrigin::new_opaque();
+                }
 
                 let global = DedicatedWorkerGlobalScope::new(
                     init,
@@ -453,7 +463,7 @@ impl DedicatedWorkerGlobalScope {
                     .mem_profiler_chan()
                     .run_with_memory_reporting(
                         || {
-                            // Step 29, Run the responsible event loop specified
+                            // Step 27, Run the responsible event loop specified
                             // by inside settings until it is destroyed.
                             // The worker processing model remains on this step
                             // until the event loop is destroyed,

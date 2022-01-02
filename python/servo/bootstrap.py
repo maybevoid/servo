@@ -108,7 +108,7 @@ def linux(context, force=False):
                 'rpm-build', 'openssl-devel', 'cmake',
                 'libXcursor-devel', 'libXmu-devel',
                 'dbus-devel', 'ncurses-devel', 'harfbuzz-devel', 'ccache',
-                'clang', 'clang-libs', 'autoconf213', 'python3-devel',
+                'clang', 'clang-libs', 'llvm', 'autoconf213', 'python3-devel',
                 'gstreamer1-devel', 'gstreamer1-plugins-base-devel',
                 'gstreamer1-plugins-bad-free-devel']
     pkgs_xbps = ['libtool', 'gcc', 'libXi-devel', 'freetype-devel',
@@ -355,7 +355,9 @@ def get_linux_distribution():
         else:
             major = version
 
-        if major == '20':
+        if major == '21':
+            base_version = '21.04'
+        elif major == '20':
             base_version = '20.04'
         elif major == '19':
             base_version = '18.04'
@@ -374,7 +376,7 @@ def get_linux_distribution():
             raise Exception('unsupported version of %s: %s' % (distrib, version))
         distrib, version = 'Ubuntu', base_version
     elif distrib.lower() == 'ubuntu':
-        if version > '20.10':
+        if version > '21.10':
             raise Exception('unsupported version of %s: %s' % (distrib, version))
     # Fixme: we should allow checked/supported versions only
     elif distrib.lower() not in [
@@ -383,6 +385,7 @@ def get_linux_distribution():
         'debian gnu/linux',
         'fedora',
         'void',
+        'nixos',
     ]:
         raise Exception('mach bootstrap does not support %s, please file a bug' % distrib)
 
@@ -397,6 +400,15 @@ def bootstrap(context, force=False, specific=None):
         bootstrapper = windows_msvc
     elif "linux-gnu" in host_triple():
         distrib, version = get_linux_distribution()
+
+        if distrib.lower() == 'nixos':
+            print('NixOS does not need bootstrap, it will automatically enter a nix-shell')
+            print('Just run ./mach build')
+            print('')
+            print('You will need to run a nix-shell if you are trying to run any of the built binaries')
+            print('To enter the nix-shell manually use:')
+            print('  $ nix-shell etc/shell.nix')
+            return
 
         context.distro = distrib
         context.distro_version = version

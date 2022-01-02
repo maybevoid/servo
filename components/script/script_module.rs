@@ -45,7 +45,7 @@ use js::jsapi::Handle as RawHandle;
 use js::jsapi::HandleObject;
 use js::jsapi::HandleValue as RawHandleValue;
 use js::jsapi::Value;
-use js::jsapi::{CompileModule1, ExceptionStackBehavior, FinishDynamicModuleImport};
+use js::jsapi::{CompileModule1, ExceptionStackBehavior, FinishDynamicModuleImport_NoTLA};
 use js::jsapi::{DynamicImportStatus, SetModuleDynamicImportHook, SetScriptPrivateReferenceHooks};
 use js::jsapi::{GetModuleResolveHook, JSRuntime, SetModuleResolveHook};
 use js::jsapi::{GetRequestedModules, SetModuleMetadataHook};
@@ -505,7 +505,8 @@ impl ModuleTree {
         let _ac = JSAutoRealm::new(*global.get_cx(), *global.reflector().get_jsobject());
 
         unsafe {
-            if !ModuleEvaluate(*global.get_cx(), module_record) {
+            rooted!(in(*global.get_cx()) let mut rval = UndefinedValue());
+            if !ModuleEvaluate(*global.get_cx(), module_record, rval.handle_mut().into()) {
                 warn!("fail to evaluate module");
 
                 rooted!(in(*global.get_cx()) let mut exception = UndefinedValue());
@@ -1024,7 +1025,7 @@ impl ModuleOwner {
         debug!("Finishing dynamic import for {:?}", module_identity);
 
         unsafe {
-            FinishDynamicModuleImport(
+            FinishDynamicModuleImport_NoTLA(
                 *cx,
                 status,
                 module.referencing_private.handle(),
@@ -1463,7 +1464,7 @@ unsafe extern "C" fn HostPopulateImportMeta(
 
     rooted!(in(cx) let url_string = JS_NewStringCopyN(
         cx,
-        base_url.as_str().as_ptr() as *const i8,
+        base_url.as_str().as_ptr() as *const _,
         base_url.as_str().len()
     ));
 
@@ -1471,7 +1472,7 @@ unsafe extern "C" fn HostPopulateImportMeta(
     JS_DefineProperty4(
         cx,
         meta_object,
-        "url\0".as_ptr() as *const i8,
+        "url\0".as_ptr() as *const _,
         url_string.handle().into_handle(),
         JSPROP_ENUMERATE.into(),
     )

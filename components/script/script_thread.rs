@@ -35,7 +35,6 @@ use crate::dom::bindings::root::ThreadLocalStackRoots;
 use crate::dom::bindings::root::{Dom, DomRoot, MutNullableDom, RootCollection};
 use crate::dom::bindings::str::DOMString;
 use crate::dom::bindings::trace::JSTraceable;
-use crate::dom::bindings::utils::WRAP_CALLBACKS;
 use crate::dom::customelementregistry::{
     CallbackReaction, CustomElementDefinition, CustomElementReactionStack,
 };
@@ -46,7 +45,7 @@ use crate::dom::element::Element;
 use crate::dom::event::{Event, EventBubbles, EventCancelable};
 use crate::dom::globalscope::GlobalScope;
 use crate::dom::htmlanchorelement::HTMLAnchorElement;
-use crate::dom::htmliframeelement::{HTMLIFrameElement, NavigationType};
+use crate::dom::htmliframeelement::HTMLIFrameElement;
 use crate::dom::identityhub::Identities;
 use crate::dom::mutationobserver::MutationObserver;
 use crate::dom::node::{window_from_node, Node, ShadowIncluding};
@@ -99,7 +98,6 @@ use hyper_serde::Serde;
 use ipc_channel::ipc::{self, IpcSender};
 use ipc_channel::router::ROUTER;
 use js::glue::GetWindowProxyClass;
-use js::jsapi::JS_SetWrapObjectCallbacks;
 use js::jsapi::{
     JSContext as UnsafeJSContext, JSTracer, JS_AddInterruptCallback, SetWindowProxyClass,
 };
@@ -774,7 +772,7 @@ impl ScriptThreadFactory for ScriptThread {
         let (sender, receiver) = unbounded();
         let layout_chan = sender.clone();
         thread::Builder::new()
-            .name(format!("ScriptThread {:?}", state.id))
+            .name(format!("Script{}", state.id))
             .spawn(move || {
                 thread_state::initialize(ThreadState::SCRIPT);
                 PipelineNamespace::install(state.pipeline_namespace_id);
@@ -1296,7 +1294,6 @@ impl ScriptThread {
         let cx = runtime.cx();
 
         unsafe {
-            JS_SetWrapObjectCallbacks(cx, &WRAP_CALLBACKS);
             SetWindowProxyClass(cx, GetWindowProxyClass());
             JS_AddInterruptCallback(cx, Some(interrupt_callback));
         }
@@ -3717,11 +3714,7 @@ impl ScriptThread {
             .borrow()
             .find_iframe(parent_pipeline_id, browsing_context_id);
         if let Some(iframe) = iframe {
-            iframe.navigate_or_reload_child_browsing_context(
-                load_data,
-                NavigationType::Regular,
-                replace,
-            );
+            iframe.navigate_or_reload_child_browsing_context(load_data, replace);
         }
     }
 

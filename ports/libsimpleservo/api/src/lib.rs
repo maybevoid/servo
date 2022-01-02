@@ -141,7 +141,13 @@ pub trait HostTrait {
     /// Servo finished shutting down.
     fn on_shutdown_complete(&self);
     /// A text input is focused.
-    fn on_ime_show(&self, input_type: InputMethodType, text: Option<String>, bounds: DeviceIntRect);
+    fn on_ime_show(
+        &self,
+        input_type: InputMethodType,
+        text: Option<(String, i32)>,
+        multiline: bool,
+        bounds: DeviceIntRect,
+    );
     /// Input lost focus
     fn on_ime_hide(&self);
     /// Gets sytem clipboard contents.
@@ -174,7 +180,7 @@ pub struct ServoGlue {
     // and exit if it is empty afterwards.
     browsers: Vec<BrowserId>,
     events: Vec<WindowEvent>,
-    current_url: Option<ServoUrl>,
+
     context_menu_sender: Option<IpcSender<ContextMenuResult>>,
 }
 
@@ -300,17 +306,15 @@ pub fn init(
     SERVO.with(|s| {
         let mut servo_glue = ServoGlue {
             webrender_surfman,
-            servo,
+            servo: servo.servo,
             batch_mode: false,
             callbacks: window_callbacks,
             browser_id: None,
             browsers: vec![],
             events: vec![],
-            current_url: Some(url.clone()),
             context_menu_sender: None,
         };
-        let browser_id = BrowserId::new();
-        let _ = servo_glue.process_event(WindowEvent::NewBrowser(url, browser_id));
+        let _ = servo_glue.process_event(WindowEvent::NewBrowser(url, servo.browser_id));
         *s.borrow_mut() = Some(servo_glue);
     });
 
@@ -636,7 +640,6 @@ impl ServoGlue {
                     self.callbacks
                         .host_callbacks
                         .on_url_changed(entries[current].clone().to_string());
-                    self.current_url = Some(entries[current].clone());
                 },
                 EmbedderMsg::LoadStart => {
                     self.callbacks.host_callbacks.on_load_started();
@@ -744,10 +747,10 @@ impl ServoGlue {
 
                     let _ = sender.send(result);
                 },
-                EmbedderMsg::ShowIME(kind, text, bounds) => {
+                EmbedderMsg::ShowIME(kind, text, multiline, bounds) => {
                     self.callbacks
                         .host_callbacks
-                        .on_ime_show(kind, text, bounds);
+                        .on_ime_show(kind, text, multiline, bounds);
                 },
                 EmbedderMsg::HideIME => {
                     self.callbacks.host_callbacks.on_ime_hide();

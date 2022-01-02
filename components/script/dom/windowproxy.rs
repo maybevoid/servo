@@ -637,13 +637,11 @@ impl WindowProxy {
             // The old window proxy no longer owns this browsing context.
             SetProxyReservedSlot(old_js_proxy.get(), 0, &PrivateValue(ptr::null_mut()));
 
-            // Brain transpant the window proxy.
-            // We need to do this, because the Window and WindowProxy
-            // objects need to be in the same realm.
-            // JS_TransplantObject does this by copying the contents
-            // of the old window proxy to the new window proxy, then
-            // making the old window proxy a cross-realm wrapper
-            // pointing to the new window proxy.
+            // Brain transpant the window proxy. Brain transplantation is
+            // usually done to move a window proxy between compartments, but
+            // that's not what we are doing here. We need to do this just
+            // because we want to replace the wrapper's `ProxyTraps`, but we
+            // don't want to update its identity.
             rooted!(in(*cx) let new_js_proxy = NewWindowProxy(*cx, window_jsobject, handler));
             debug!(
                 "Transplanting proxy from {:p} to {:p}.",
@@ -1042,6 +1040,8 @@ unsafe extern "C" fn get_prototype_if_ordinary(
 }
 
 static PROXY_HANDLER: ProxyTraps = ProxyTraps {
+    // TODO: These traps should change their behavior depending on
+    //       `IsPlatformObjectSameOrigin(this.[[Window]])`
     enter: None,
     getOwnPropertyDescriptor: Some(getOwnPropertyDescriptor),
     defineProperty: Some(defineProperty),
@@ -1049,6 +1049,9 @@ static PROXY_HANDLER: ProxyTraps = ProxyTraps {
     delete_: None,
     enumerate: None,
     getPrototypeIfOrdinary: Some(get_prototype_if_ordinary),
+    getPrototype: None, // TODO: return `null` if cross origin-domain
+    setPrototype: None,
+    setImmutablePrototype: None,
     preventExtensions: None,
     isExtensible: None,
     has: Some(has),
@@ -1081,6 +1084,9 @@ pub fn new_window_proxy_handler() -> WindowProxyHandler {
 // These traps often throw security errors, and only pass on calls to methods
 // defined in the DissimilarOriginWindow IDL.
 
+// TODO: reuse the infrastructure in `proxyhandler.rs`. For starters, the calls
+//       to this function should be replaced with those to
+//       `report_cross_origin_denial`.
 #[allow(unsafe_code)]
 unsafe fn throw_security_error(cx: *mut JSContext, realm: InRealm) -> bool {
     if !JS_IsExceptionPending(cx) {
@@ -1191,6 +1197,9 @@ static XORIGIN_PROXY_HANDLER: ProxyTraps = ProxyTraps {
     delete_: Some(delete_xorigin),
     enumerate: None,
     getPrototypeIfOrdinary: None,
+    getPrototype: None,
+    setPrototype: None,
+    setImmutablePrototype: None,
     preventExtensions: Some(preventExtensions_xorigin),
     isExtensible: None,
     has: Some(has_xorigin),

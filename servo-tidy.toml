@@ -41,7 +41,6 @@ packages = [
   "env_logger",
   "fixedbitset",
   "gleam",
-  "humantime",
   "libloading",
   "lock_api",
   "memoffset",
@@ -53,6 +52,9 @@ packages = [
   "petgraph",
   "ron",
   "wayland-sys",
+  "rustc_version",
+  "semver",
+  "semver-parser",
 
   # https://github.com/servo/servo/issues/26933
   "futures",
@@ -67,16 +69,17 @@ packages = [
   # Lots of crates to update.
   "smallvec",
 
-  # https://github.com/servo/servo/issues/24421
-  "proc-macro2",
-  "quote",
-  "unicode-xid",
-
   # https://github.com/servo/servo/pull/25518
   "core-foundation",
   "core-foundation-sys",
   "core-graphics",
   "lyon_geom",
+
+  # https://github.com/servo/servo/pull/28236
+  "dlib",
+  "nix",
+  "nom",
+  "strsim",
 
   # Duplicated by webrender debugger via ws
   "digest",
@@ -141,6 +144,7 @@ directories = [
   "./components/script/dom/bindings/codegen/parser",
   "./components/script/dom/bindings/codegen/ply",
   "./python/_virtualenv*",
+  "./python/mach",
   "./components/hashglobe/src",
   # Generated and upstream code combined with our own. Could use cleanup
   "./target",

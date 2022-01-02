@@ -120,7 +120,7 @@ def archive_deterministically(dir_to_archive, dest_archive, prepend_path=None):
                             arcname = os.path.normpath(os.path.join(prepend_path, arcname))
                         zip_file.write(entry, arcname=arcname)
             else:
-                with gzip.GzipFile('wb', fileobj=out_file, mtime=0) as gzip_file:
+                with gzip.GzipFile(mode='wb', fileobj=out_file, mtime=0) as gzip_file:
                     with tarfile.open(fileobj=gzip_file, mode='w:') as tar_file:
                         for entry in file_list:
                             arcname = entry
@@ -373,7 +373,12 @@ class CommandBase(object):
             base_path = path.join(base_path, target)
 
         if simpleservo:
-            binary_name = "simpleservo.dll" if sys.platform == "win32" else "libsimpleservo.so"
+            if sys.platform == "win32":
+                binary_name = "simpleservo.dll"
+            elif sys.platform == "darwin":
+                binary_name = "libsimpleservo.dylib"
+            else:
+                binary_name = "libsimpleservo.so"
 
         release_path = path.join(base_path, "release", binary_name)
         dev_path = path.join(base_path, "debug", binary_name)
@@ -608,7 +613,14 @@ install them, let us know by filing a bug!")
             extra_path += [path.join(self.msvc_package_dir("llvm"), "bin")]
             extra_path += [path.join(self.msvc_package_dir("ninja"), "bin")]
             extra_path += [self.msvc_package_dir("nuget")]
-            extra_path += [path.join(self.msvc_package_dir("xargo"))]
+
+            env.setdefault("CC", "clang-cl.exe")
+            env.setdefault("CXX", "clang-cl.exe")
+            if uwp:
+                env.setdefault("TARGET_CFLAGS", "")
+                env.setdefault("TARGET_CXXFLAGS", "")
+                env["TARGET_CFLAGS"] += " -DWINAPI_FAMILY=WINAPI_FAMILY_APP"
+                env["TARGET_CXXFLAGS"] += " -DWINAPI_FAMILY=WINAPI_FAMILY_APP"
 
             arch = (target or host_triple()).split('-')[0]
             vcpkg_arch = {
@@ -932,9 +944,8 @@ install them, let us know by filing a bug!")
         args += ["--features", " ".join(features)]
 
         if target and 'uwp' in target:
-            return call(["xargo", command] + args + cargo_args, env=env, verbose=verbose)
-        else:
-            return self.call_rustup_run(["cargo", command] + args + cargo_args, env=env, verbose=verbose)
+            cargo_args += ["-Z", "build-std"]
+        return self.call_rustup_run(["cargo", command] + args + cargo_args, env=env, verbose=verbose)
 
     def android_support_dir(self):
         return path.join(self.context.topdir, "support", "android")
@@ -1028,7 +1039,12 @@ install them, let us know by filing a bug!")
 
     def ensure_rustup_version(self):
         try:
-            version_line = subprocess.check_output(["rustup" + BIN_SUFFIX, "--version"])
+            version_line = subprocess.check_output(
+                ["rustup" + BIN_SUFFIX, "--version"],
+                # Silence "info: This is the version for the rustup toolchain manager,
+                # not the rustc compiler."
+                stderr=open(os.devnull, "wb")
+            )
         except OSError as e:
             if e.errno == NO_SUCH_FILE_OR_DIRECTORY:
                 print("It looks like rustup is not installed. See instructions at "

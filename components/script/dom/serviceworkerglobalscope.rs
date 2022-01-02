@@ -280,7 +280,7 @@ impl ServiceWorkerGlobalScope {
     }
 
     #[allow(unsafe_code)]
-    // https://html.spec.whatwg.org/multipage/#run-a-worker
+    // https://w3c.github.io/ServiceWorker/#run-service-worker-algorithm
     pub fn run_serviceworker_scope(
         scope_things: ScopeThings,
         own_sender: Sender<ServiceWorkerScriptMsg>,
@@ -302,7 +302,7 @@ impl ServiceWorkerGlobalScope {
         let serialized_worker_url = script_url.to_string();
         let origin = scope_url.origin();
         thread::Builder::new()
-            .name(format!("ServiceWorker for {}", serialized_worker_url))
+            .name(format!("SW:{}", script_url.debug_compact()))
             .spawn(move || {
                 thread_state::initialize(ThreadState::SCRIPT | ThreadState::IN_WORKER);
                 let runtime = new_rt_and_cx(None);
@@ -382,7 +382,7 @@ impl ServiceWorkerGlobalScope {
                     .mem_profiler_chan()
                     .run_with_memory_reporting(
                         || {
-                            // Step 29, Run the responsible event loop specified
+                            // Step 18, Run the responsible event loop specified
                             // by inside settings until it is destroyed.
                             // The worker processing model remains on this step
                             // until the event loop is destroyed,

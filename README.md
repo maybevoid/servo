@@ -36,13 +36,13 @@ curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain none
 ```
 
 See also [Other installation methods](
-https://github.com/rust-lang-nursery/rustup.rs/#other-installation-methods)
+https://rust-lang.github.io/rustup/installation/other.html)
 
 ### Other dependencies
 
 Please select your operating system:
 * [macOS](#macos)
-* [Debian-based Linuxes](#on-debian-based-linuxes)
+* [Debian-based distros](#on-debian-based-distros)
 * [Fedora](#on-fedora)
 * [Arch Linux](#on-arch-linux)
 * [openSUSE](#on-opensuse-linux)
@@ -54,7 +54,7 @@ Please select your operating system:
 
 Xcode version 10.2 or above is recommended.
 
-##### On macOS (Homebrew)
+##### On macOS(Intel based or ARM based) (Homebrew)
 
 NOTE: run these steps after you've cloned the project locally.
 
@@ -65,20 +65,11 @@ brew bundle install --file=etc/taskcluster/macos/Brewfile-build
 pip install virtualenv
 ```
 
-#### On Debian-based Linuxes
+#### On Debian-based distros
 
 ``` sh
-sudo apt install python-virtualenv python-pip
+sudo apt install python3-virtualenv python3-pip
 ./mach bootstrap
-```
-
-If you are on Ubuntu 20.04 or higher you need to do the following to install the missing python2 bits:
-
-```sh
-curl https://bootstrap.pypa.io/get-pip.py -sSf -o get-pip.py
-python2 get-pip.py
-python2 -m pip install virtualenv
-sudo apt install python-dev
 ```
 
 If `./mach bootstrap` doesn't work, file a bug, and, run the commands below:
@@ -98,9 +89,9 @@ Additionally, you'll need a local copy of GStreamer with a version later than 16
 sudo apt install gstreamer1.0-nice gstreamer1.0-plugins-bad
 ```
 
-If you are using **Ubuntu 16.04** or **Linux Mint 18.&#42;** run `export HARFBUZZ_SYS_NO_PKG_CONFIG=1` before building to avoid an error with harfbuzz.
+If you are using **Ubuntu 16.04** or **Linux Mint 18**, run `export HARFBUZZ_SYS_NO_PKG_CONFIG=1` before building to avoid an error with harfbuzz.
 
-If you get an undefined symbol error on `gst_player_get_config` try removing `gir1.2-gst-plugins-bad-1.0` and all old versions of clang, see [#22016](https://github.com/servo/servo/issues/22016)
+If you get an undefined symbol error on `gst_player_get_config` try removing `gir1.2-gst-plugins-bad-1.0` and all old versions of clang, see [#22016](https://github.com/servo/servo/issues/22016).
 
 #### On Fedora
 
@@ -152,21 +143,22 @@ export CMAKE=cmake3
 export LIBCLANG_PATH=/opt/rh/llvm-toolset-7/root/usr/lib64
 ```
 
-#### On openSUSE Linux
+#### On openSUSE
 
 ``` sh
 sudo zypper install libX11-devel libexpat-devel Mesa-libEGL-devel Mesa-libGL-devel cabextract cmake \
     dbus-1-devel fontconfig-devel freetype-devel gcc-c++ git glib2-devel gperf \
     harfbuzz-devel libXcursor-devel libXi-devel libXmu-devel libXrandr-devel libopenssl-devel \
-    python-pip python-virtualenv rpm-build ccache llvm-clang libclang autoconf213 gstreamer-devel \
+    python3-pip python3-virtualenv rpm-build ccache llvm-clang libclang autoconf213 gstreamer-devel \
     gstreamer-plugins-base-devel gstreamer-plugins-bad-devel
 ```
 
 #### On Arch Linux
 
 ``` sh
-sudo pacman -S --needed base-devel git python2 python2-virtualenv python2-pip mesa cmake libxmu \
-    pkg-config ttf-fira-sans harfbuzz ccache llvm clang autoconf2.13 gstreamer gstreamer-vaapi
+sudo pacman -S --needed base-devel git python python-virtualenv python-pip mesa cmake libxmu \
+    pkg-config ttf-fira-sans harfbuzz ccache llvm clang autoconf2.13 gstreamer gstreamer-vaapi \
+    gst-plugins-base gst-plugins-good gst-plugins-bad
 ```
 
 #### On Gentoo Linux
@@ -185,56 +177,51 @@ With the following environment variable set:
 export LIBCLANG_PATH=$(llvm-config --prefix)/lib64
 ```
 
+#### On nixOS Linux
+
+```sh
+nix-shell etc/shell.nix
+```
+
+You will need to run this in every shell before running mach.
+
 #### On Windows (MSVC)
 
-1. Install Python 2.7 for Windows (https://www.python.org/downloads/release/python-2716/). The Windows x86-64 MSI installer is fine. This is required for the build system execution and many dependencies.
+1. Install Python 3.9 for Windows (https://www.python.org/downloads/release/python-392/). The Windows x86-64 MSI installer is fine. This is required in order to build the JavaScript engine, SpiderMonkey.
 
-You should change the installation to install the "Add python.exe to Path" feature.
-
-You will also need to set the `PYTHON2` environment variable, e.g., to 'C:\Python27\python.exe' by doing:
+You will also need to set the `PYTHON3` environment variable, e.g., to 'C:\Python39\python.exe' by doing:
 ```
-setx PYTHON2 "C:\Python27\python.exe" /m
-```
-
-2. Install Python 3.7 for Windows (https://www.python.org/downloads/release/python-374/). The Windows x86-64 MSI installer is fine. This is required in order to build the JavaScript engine, SpiderMonkey.
-
-You will also need to set the `PYTHON3` environment variable, e.g., to 'C:\Python37\python.exe' by doing:
-```
-setx PYTHON3 "C:\Python37\python.exe" /m
+setx PYTHON3 "C:\Python39\python.exe" /m
 ```
 The `/m` will set it system-wide for all future command windows.
 
-3. Install virtualenv.
+2. Install virtualenv.
 
- In a normal Windows Shell (cmd.exe or "Command Prompt" from the start menu), do:
+ In a normal Windows Shell (cmd), do:
  ```
 pip install virtualenv
 ```
  If this does not work, you may need to reboot for the changed PATH settings (by the python installer) to take effect.
 
-4. Install the most recent [GStreamer](https://gstreamer.freedesktop.org/data/pkg/windows/) MSVC packages. You need to download the two `.msi` files for your platform from the [GStreamer](https://gstreamer.freedesktop.org/data/pkg/windows/) website and install them. The currently recommended version is 1.16.0. i.e.:
+3. Install the most recent [GStreamer](https://gstreamer.freedesktop.org/data/pkg/windows/) MSVC packages. You need to download the two `.msi` files for your platform from the [GStreamer](https://gstreamer.freedesktop.org/data/pkg/windows/) website and install them. The currently recommended version is 1.16.0. i.e.:
 
 - [gstreamer-1.0-msvc-x86_64-1.16.0.msi](https://gstreamer.freedesktop.org/data/pkg/windows/1.16.0/gstreamer-1.0-msvc-x86_64-1.16.0.msi)
 - [gstreamer-1.0-devel-msvc-x86_64-1.16.0.msi](https://gstreamer.freedesktop.org/data/pkg/windows/1.16.0/gstreamer-1.0-devel-msvc-x86_64-1.16.0.msi)
 
-Note that the MinGW binaries will not work, so make sure that you install the MSVC the ones.
+Note that the MinGW binaries will not work, so make sure that you install the MSVC ones.
 
 Note that you should ensure that _all_ components are installed from gstreamer, as we require many of the optional libraries that are not installed by default.
 
-5. Install Git for Windows (https://git-scm.com/download/win). DO allow it to add git.exe to the PATH (default
+4. Install Git for Windows (https://git-scm.com/download/win). DO allow it to add git.exe to the PATH (default
 settings for the installer are fine).
 
-6. Install Visual Studio Community 2017 (https://www.visualstudio.com/vs/community/). You MUST add "Visual C++" to the
-list of installed components as well as the "Windows Universal C runtime." They are not on by default. Visual Studio 2017 MUST installed to the default location or mach.bat will not find it.
-
-Note that version is hard to download online and is easier to install via [Chocolatey](https://chocolatey.org/install#installing-chocolatey) with:
+5. Install Visual Studio Build Tools 2019 (https://visualstudio.microsoft.com/de/downloads/#build-tools-for-visual-studio-2019). It is easiest to install via [Chocolatey](https://chocolatey.org/install#installing-chocolatey) with:
 ```
-choco install -y visualstudio2017community --package-parameters="'--add Microsoft.VisualStudio.Component.Git'"
-Update-SessionEnvironment #refreshing env due to Git install
-
-#--- UWP Workload and installing Windows Template Studio ---
-choco install -y visualstudio2017-workload-nativedesktop
+choco install -y visualstudio2019buildtools --package-parameters="--add Microsoft.VisualStudio.Component.Roslyn.Compiler --add Microsoft.Component.MSBuild --add Microsoft.VisualStudio.Component.CoreBuildTools --add Microsoft.VisualStudio.Workload.MSBuildTools --add Microsoft.VisualStudio.Component.Windows10SDK --add Microsoft.VisualStudio.Component.VC.CoreBuildTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.VC.Redist.14.Latest --add Microsoft.VisualStudio.Component.VC.ATL --add Microsoft.VisualStudio.Component.VC.ATLMFC --add Microsoft.VisualStudio.Component.TextTemplating --add Microsoft.VisualStudio.Component.VC.CoreIde --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Core --add Microsoft.VisualStudio.Workload.VCTools"
 ```
+If you really need to use the Visual Studio Installer (UI), choose "Desktop development with C++" and add the optional "MSVC", "C++-ATL" and "C++-MFC" (latest).
+
+The Visual Studio 2019 Build Tools MUST be installed to the default location or mach.bat will not find them.
 
 ##### [Optional] Install LLVM for faster link times
 
@@ -251,13 +238,8 @@ linker = "lld-link.exe"
 
 ##### Troubleshooting a Windows environment
 
-> If you encountered errors with the environment above, do the following for a workaround:
-> 1.  Download and install [Build Tools for Visual Studio 2017](https://www.visualstudio.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=15)
-> 2.  Install `python2.7 x86-x64` and `virtualenv`
-> 3.  Run `mach.bat build -d`.
-
 >If you have troubles with `x64 type` prompt as `mach.bat` set by default:
-> 1. You may need to choose and launch the type manually, such as `x86_x64 Cross Tools Command Prompt for VS 2017` in the Windows menu.)
+> 1. You may need to choose and launch the type manually, such as `x86_x64 Cross Tools Command Prompt for VS 2019` in the Windows menu.)
 > 2. `cd to/the/path/servo`
 > 3. `python mach build -d`
 
@@ -279,38 +261,48 @@ linker = "lld-link.exe"
 Run `./mach bootstrap-android --build` to get Android-specific tools. See wiki for
 [details](https://github.com/servo/servo/wiki/Building-for-Android).
 
-## The Rust compiler
+### Cloning the Repo
+Your CARGO_HOME needs to point to (or be in) the same drive as your Servo repository (See [#28530](https://github.com/servo/servo/issues/28530)).
+``` sh
+git clone https://github.com/servo/servo
+cd servo
+```
+
+## Building
+
+Servo is built with [Cargo](https://crates.io/), the Rust package manager.
+We also use Mozilla's Mach tools to orchestrate the build and other tasks.
+You can call Mach like this:
+
+On Unix sytems:
+```
+./mach [command] [arguments]
+```
+On Windows Commandline:
+```
+mach.bat [command] [arguments]
+```
+The examples below will use Unix, but the same applies to Windows.
+
+### The Rust compiler
 
 Servo's build system uses rustup.rs to automatically download a Rust compiler.
 This is a specific version of Rust Nightly determined by the
 [`rust-toolchain`](https://github.com/servo/servo/blob/master/rust-toolchain) file.
 
-## Building
-
-Servo is built with [Cargo](https://crates.io/), the Rust package manager. We also use Mozilla's
-Mach tools to orchestrate the build and other tasks.
-
 ### Normal build
 
-To build Servo in development mode.  This is useful for development, but
-the resulting binary is very slow.
+To build Servo in development mode.
+This is useful for development, but the resulting binary is very slow:
 
 ``` sh
-git clone https://github.com/servo/servo
-cd servo
 ./mach build --dev
 ./mach run tests/html/about-mozilla.html
 ```
 
-Or on Windows MSVC, in a normal Command Prompt (cmd.exe):
-``` cmd
-git clone https://github.com/servo/servo
-cd servo
-mach.bat build --dev
-```
-
-For benchmarking, performance testing, or
-real-world use, add the `--release` flag to create an optimized build:
+### Release build
+For benchmarking, performance testing, or real-world use.
+Add the `--release` flag to create an optimized build:
 
 ``` sh
 ./mach build --release
@@ -378,6 +370,14 @@ Run Servo with the command:
 - `Alt`+`left arrow` goes backwards in the history (`Cmd`+`left arrow` on Mac)
 - `Alt`+`right arrow` goes forwards in the history (`Cmd`+`right arrow` on Mac)
 - `Esc` or `Ctrl`+`Q` exits Servo (`Cmd`+`Q` on Mac)
+
+### Runtime dependencies
+
+#### Linux
+
+* `GStreamer` >=1.16
+* `gst-plugins-bad` >=1.16
+
 
 ## Developing
 

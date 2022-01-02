@@ -1929,7 +1929,10 @@ policies and contribution forms [3].
             throw new AssertionError(errors.join("\n\n"));
         }
     }
-    expose_assert(assert_any, "assert_any");
+    // FIXME: assert_any cannot use expose_assert, because assert_wrapper does
+    // not support nested assert calls (e.g. to assert_func). We need to
+    // support bypassing assert_wrapper for the inner asserts here.
+    expose(assert_any, "assert_any");
 
     /**
      * Assert that a feature is implemented, based on a 'truthy' condition.
@@ -3538,10 +3541,9 @@ policies and contribution forms [3].
                 if (assert.stack) {
                     output_location = assert.stack.split("\n", 1)[0].replace(/@?\w+:\/\/[^ "\/]+(?::\d+)?/g, " ");
                 }
-                return "<tr><td class=" +
-                    status_class(Test.prototype.status_formats[assert.status]) + ">" +
+                return "<tr><td class='" +
+                    status_class(Test.prototype.status_formats[assert.status]) + "'>" +
                     Test.prototype.status_formats[assert.status] + "</td>" +
-                    "</td>" +
                     "<td><pre>" +
                     output_fn +
                     (output_location ? "\n" + escape_html(output_location) : "") +

@@ -793,6 +793,9 @@ impl Fragment {
                         );
                     }
                 },
+                Image::CrossFade(..) | Image::ImageSet(..) => {
+                    unreachable!("Shouldn't be parsed by Servo for now")
+                },
                 Image::Rect(ref rect) => {
                     // This is a (boxed) empty enum on non-Gecko
                     match **rect {}
@@ -1785,7 +1788,7 @@ impl Fragment {
                         clip,
                     );
                 }
-            }
+            },
             SpecificFragmentInfo::ScannedText(ref text_fragment) => {
                 // Create the main text display item.
                 self.build_display_list_for_text_fragment(

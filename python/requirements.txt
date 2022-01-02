@@ -1,10 +1,9 @@
 # Ensure all versions are pinned for repeatability,
 # since `--system-site-packages` is enabled
 
-blessings == 1.6
+blessings == 1.7
 distro == 1.4
-mach == 1.0.0
-mozdebug == 0.2
+mozdebug == 0.3
 mozinfo == 1.2.1
 mozlog == 7.1.0
 setuptools == 50.3.2
@@ -22,7 +21,7 @@ ply == 3.8
 colorama == 0.3.7
 
 # For package uploading
-boto3 == 1.4.4
+boto3 == 1.17.27
 
 # Default root CAs on Windows CI do not trust CloudFront certificates,
 # connecting to https://static.rust-lang.org would fail:

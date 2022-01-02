@@ -249,7 +249,7 @@ pub unsafe extern "C" fn move_servo(servo: *mut ServoInstance, x: f32, y: f32) {
                 if (start - point).square_length() < DRAG_CUTOFF_SQUARED =>
             {
                 return;
-            }
+            },
             ScrollState::TriggerDown(start) => {
                 servo.scroll_state = ScrollState::TriggerDragging(start, point);
                 let _ = call(|s| s.mouse_move(x, y));
@@ -416,7 +416,8 @@ impl HostTrait for HostCallbacks {
     fn on_ime_show(
         &self,
         _input_type: InputMethodType,
-        _text: Option<String>,
+        _text: Option<(String, i32)>,
+        _multiline: bool,
         _bounds: DeviceIntRect,
     ) {
         if let Some(keyboard) = self.keyboard.0 {

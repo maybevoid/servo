@@ -58,7 +58,8 @@ fn report_panic(reason: &str, backtrace: Option<String>) {
     };
     let error = CString::new(message).expect("Can't create string");
     (ON_PANIC.read().unwrap())(error.as_ptr());
-    panic!("At that point, embedder should have thrown");
+    // At this point, embedder should probably have thrown, so we never reach
+    // this point. But if it didn't, don't recursively panic.
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -188,7 +189,7 @@ where
         Some(ref mut s) => (f)(s),
         None => Err("Servo not available in this thread"),
     }) {
-        Err(e) => panic!(e),
+        Err(e) => panic!("{}", e),
         Ok(r) => r,
     }
 }
@@ -204,7 +205,15 @@ pub struct CHostCallbacks {
     pub on_history_changed: extern "C" fn(can_go_back: bool, can_go_forward: bool),
     pub on_animating_changed: extern "C" fn(animating: bool),
     pub on_shutdown_complete: extern "C" fn(),
-    pub on_ime_show: extern "C" fn(text: *const c_char, x: i32, y: i32, width: i32, height: i32),
+    pub on_ime_show: extern "C" fn(
+        text: *const c_char,
+        text_index: i32,
+        multiline: bool,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ),
     pub on_ime_hide: extern "C" fn(),
     pub get_clipboard_contents: extern "C" fn() -> *const c_char,
     pub set_clipboard_contents: extern "C" fn(contents: *const c_char),
@@ -490,7 +499,11 @@ pub extern "C" fn init_with_egl(
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+#[cfg(any(
+    target_os = "linux",
+    all(target_os = "windows", not(feature = "no-wgl")),
+    target_os = "macos"
+))]
 #[no_mangle]
 pub extern "C" fn init_with_gl(
     opts: CInitOptions,
@@ -803,17 +816,21 @@ impl HostTrait for HostCallbacks {
     fn on_ime_show(
         &self,
         _input_type: InputMethodType,
-        text: Option<String>,
+        text: Option<(String, i32)>,
+        multiline: bool,
         bounds: DeviceIntRect,
     ) {
         debug!("on_ime_show");
-        let text = text.and_then(|s| CString::new(s).ok());
+        let text_index = text.as_ref().map_or(0, |(_, i)| *i);
+        let text = text.and_then(|(s, _)| CString::new(s).ok());
         let text_ptr = text
             .as_ref()
             .map(|cstr| cstr.as_ptr())
             .unwrap_or(std::ptr::null());
         (self.0.on_ime_show)(
             text_ptr,
+            text_index,
+            multiline,
             bounds.origin.x,
             bounds.origin.y,
             bounds.size.width,

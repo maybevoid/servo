@@ -23,7 +23,9 @@ use image::{DynamicImage, ImageFormat};
 use ipc_channel::ipc;
 use libc::c_void;
 use log::warn;
-use msg::constellation_msg::{PipelineId, PipelineIndex, PipelineNamespaceId};
+use msg::constellation_msg::{
+    PipelineId, PipelineIndex, PipelineNamespaceId, TopLevelBrowsingContextId,
+};
 use net_traits::image::base::Image;
 use net_traits::image_cache::CorsStatus;
 use num_traits::FromPrimitive;
@@ -104,6 +106,11 @@ impl FrameTreeId {
 #[derive(Clone, Copy, Debug)]
 enum LayerPixel {}
 
+struct RootPipeline {
+    top_level_browsing_context_id: TopLevelBrowsingContextId,
+    id: Option<PipelineId>,
+}
+
 /// NB: Never block on the constellation, because sometimes the constellation blocks on us.
 pub struct IOCompositor<Window: WindowMethods + ?Sized> {
     /// The application window.
@@ -113,7 +120,7 @@ pub struct IOCompositor<Window: WindowMethods + ?Sized> {
     port: CompositorReceiver,
 
     /// The root pipeline.
-    root_pipeline: Option<CompositionPipeline>,
+    root_pipeline: RootPipeline,
 
     /// Tracks details about each active pipeline that the compositor knows about.
     pipeline_details: HashMap<PipelineId, PipelineDetails>,
@@ -140,9 +147,6 @@ pub struct IOCompositor<Window: WindowMethods + ?Sized> {
     /// Tracks whether we are in the process of shutting down, or have shut down and should close
     /// the compositor.
     pub shutdown_state: ShutdownState,
-
-    /// Tracks the last composite time.
-    last_composite_time: u64,
 
     /// Tracks whether the zoom action has happened recently.
     zoom_action: bool,
@@ -292,6 +296,7 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
         is_running_problem_test: bool,
         exit_after_load: bool,
         convert_mouse_to_touch: bool,
+        top_level_browsing_context_id: TopLevelBrowsingContextId,
     ) -> Self {
         let composite_target = match output_file {
             Some(_) => CompositeTarget::PngFile,
@@ -302,7 +307,10 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
             embedder_coordinates: window.get_coordinates(),
             window,
             port: state.receiver,
-            root_pipeline: None,
+            root_pipeline: RootPipeline {
+                top_level_browsing_context_id,
+                id: None,
+            },
             pipeline_details: HashMap::new(),
             scale: Scale::new(1.0),
             composition_request: CompositionRequest::NoCompositingNecessary,
@@ -320,7 +328,6 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
             frame_tree_id: FrameTreeId(0),
             constellation_chan: state.constellation_chan,
             time_profiler_chan: state.time_profiler_chan,
-            last_composite_time: 0,
             ready_to_save_state: ReadyState::Unknown,
             webrender: state.webrender,
             webrender_document: state.webrender_document,
@@ -346,6 +353,7 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
         is_running_problem_test: bool,
         exit_after_load: bool,
         convert_mouse_to_touch: bool,
+        top_level_browsing_context_id: TopLevelBrowsingContextId,
     ) -> Self {
         let mut compositor = IOCompositor::new(
             window,
@@ -354,6 +362,7 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
             is_running_problem_test,
             exit_after_load,
             convert_mouse_to_touch,
+            top_level_browsing_context_id,
         );
 
         // Make sure the GL state is OK
@@ -785,7 +794,10 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
             frame_tree.pipeline.id
         );
 
-        self.root_pipeline = Some(frame_tree.pipeline.clone());
+        self.root_pipeline = RootPipeline {
+            top_level_browsing_context_id: frame_tree.pipeline.top_level_browsing_context_id,
+            id: Some(frame_tree.pipeline.id),
+        };
 
         let pipeline_id = frame_tree.pipeline.id.to_webrender();
         let mut txn = webrender_api::Transaction::new();
@@ -827,10 +839,7 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
             initial_viewport: initial_viewport,
         };
 
-        let top_level_browsing_context_id = self
-            .root_pipeline
-            .as_ref()
-            .map(|pipeline| pipeline.top_level_browsing_context_id);
+        let top_level_browsing_context_id = self.root_pipeline.top_level_browsing_context_id;
 
         let msg = ConstellationMsg::WindowSize(top_level_browsing_context_id, data, size_type);
 
@@ -839,7 +848,7 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
         }
     }
 
-    pub fn on_resize_window_event(&mut self) {
+    pub fn on_resize_window_event(&mut self) -> bool {
         debug!("compositor resize requested");
 
         let old_coords = self.embedder_coordinates;
@@ -851,11 +860,12 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
         }
 
         if self.embedder_coordinates.viewport == old_coords.viewport {
-            return;
+            return false;
         }
 
         self.send_window_size(WindowSizeType::Resize);
         self.composite_if_necessary(CompositingReason::Resize);
+        return true;
     }
 
     pub fn on_mouse_window_event_class(&mut self, mouse_window_event: MouseWindowEvent) {
@@ -929,7 +939,7 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
     }
 
     fn dispatch_mouse_window_move_event_class(&mut self, cursor: DevicePoint) {
-        let root_pipeline_id = match self.get_root_pipeline_id() {
+        let root_pipeline_id = match self.root_pipeline.id {
             Some(root_pipeline_id) => root_pipeline_id,
             None => return,
         };
@@ -1207,10 +1217,7 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
     }
 
     fn constrain_viewport(&mut self, pipeline_id: PipelineId, constraints: ViewportConstraints) {
-        let is_root = self
-            .root_pipeline
-            .as_ref()
-            .map_or(false, |root_pipeline| root_pipeline.id == pipeline_id);
+        let is_root = self.root_pipeline.id == Some(pipeline_id);
 
         if is_root {
             self.viewport_zoom = constraints.initial_zoom;
@@ -1580,8 +1587,6 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
             warn!("Failed to present surface: {:?}", err);
         }
 
-        self.last_composite_time = precise_time_ns();
-
         self.composition_request = CompositionRequest::NoCompositingNecessary;
 
         self.process_animations();
@@ -1643,10 +1648,6 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
             ),
             (gleam::gl::NO_ERROR, gleam::gl::FRAMEBUFFER_COMPLETE)
         );
-    }
-
-    fn get_root_pipeline_id(&self) -> Option<PipelineId> {
-        self.root_pipeline.as_ref().map(|pipeline| pipeline.id)
     }
 
     pub fn receive_messages(&mut self) -> bool {

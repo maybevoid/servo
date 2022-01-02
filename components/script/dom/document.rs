@@ -140,7 +140,6 @@ use num_traits::ToPrimitive;
 use percent_encoding::percent_decode;
 use profile_traits::ipc as profile_ipc;
 use profile_traits::time::{TimerMetadata, TimerMetadataFrameType, TimerMetadataReflowType};
-use ref_slice::ref_slice;
 use script_layout_interface::message::{Msg, PendingRestyle, ReflowGoal};
 use script_layout_interface::TrustedNodeAddress;
 use script_traits::{AnimationState, DocumentActivity, MouseButton, MouseEventType};
@@ -161,6 +160,7 @@ use std::default::Default;
 use std::mem;
 use std::ptr::NonNull;
 use std::rc::Rc;
+use std::slice::from_ref;
 use std::time::{Duration, Instant};
 use style::attr::AttrValue;
 use style::context::QuirksMode;
@@ -1122,16 +1122,29 @@ impl Document {
                     Point2D::new(rect.origin.x.to_px(), rect.origin.y.to_px()),
                     Size2D::new(rect.size.width.to_px(), rect.size.height.to_px()),
                 );
-                let text = if let Some(input) = elem.downcast::<HTMLInputElement>() {
-                    Some((&input.Value()).to_string())
+                let (text, multiline) = if let Some(input) = elem.downcast::<HTMLInputElement>() {
+                    (
+                        Some((
+                            (&input.Value()).to_string(),
+                            input.GetSelectionEnd().unwrap_or(0) as i32,
+                        )),
+                        false,
+                    )
                 } else if let Some(textarea) = elem.downcast::<HTMLTextAreaElement>() {
-                    Some((&textarea.Value()).to_string())
+                    (
+                        Some((
+                            (&textarea.Value()).to_string(),
+                            textarea.GetSelectionEnd().unwrap_or(0) as i32,
+                        )),
+                        true,
+                    )
                 } else {
-                    None
+                    (None, false)
                 };
                 self.send_to_embedder(EmbedderMsg::ShowIME(
                     kind,
                     text,
+                    multiline,
                     DeviceIntRect::from_untyped(&rect),
                 ));
             }
@@ -1695,7 +1708,7 @@ impl Document {
             Some(window),
             0i32,
             &touches,
-            &TouchList::new(window, ref_slice(&&*touch)),
+            &TouchList::new(window, from_ref(&&*touch)),
             &TouchList::new(window, target_touches.r()),
             // FIXME: modifier keys
             false,
@@ -3454,7 +3467,12 @@ impl Document {
         let window_size = self.window().window_size();
         let viewport_size = window_size.initial_viewport;
         let device_pixel_ratio = window_size.device_pixel_ratio;
-        Device::new(MediaType::screen(), viewport_size, device_pixel_ratio)
+        Device::new(
+            MediaType::screen(),
+            self.quirks_mode(),
+            viewport_size,
+            device_pixel_ratio,
+        )
     }
 
     pub fn salvageable(&self) -> bool {
@@ -3551,8 +3569,9 @@ impl Document {
         } else {
             snapshot.other_attributes_changed = true;
         }
-        if !snapshot.changed_attrs.contains(attr.local_name()) {
-            snapshot.changed_attrs.push(attr.local_name().clone());
+        let local_name = style::LocalName::cast(attr.local_name());
+        if !snapshot.changed_attrs.contains(local_name) {
+            snapshot.changed_attrs.push(local_name.clone());
         }
         if snapshot.attrs.is_none() {
             let attrs = el
