@@ -535,8 +535,7 @@ impl WindowMethods for Window {
         let PhysicalSize { width, height } = self
             .winit_window
             .outer_size();
-            .unwrap_or(LogicalSize::new(1920.0, 1080.0));
-        let LogicalPosition { x, y } = self
+        let PhysicalPosition { x, y } = self
             .winit_window
             .outer_position()
             .unwrap_or(PhysicalPosition::new(0, 0));

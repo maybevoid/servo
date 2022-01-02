@@ -17,7 +17,7 @@ canvas = { path = "../canvas" }
 canvas_traits = { path = "../canvas_traits" }
 crossbeam-channel = "0.4"
 euclid = "0.20"
-ferrite-session = "0.1.1"
+ferrite-session = "0.2.0"
 fxhash = "0.2"
 gfx_traits = { path = "../gfx_traits" }
 html5ever = "0.25"

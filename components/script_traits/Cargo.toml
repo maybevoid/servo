@@ -20,7 +20,7 @@ crossbeam-channel = "0.4"
 devtools_traits = { path = "../devtools_traits" }
 embedder_traits = { path = "../embedder_traits" }
 euclid = "0.20"
-ferrite-session = "0.1.1"
+ferrite-session = "0.2.0"
 gfx_traits = { path = "../gfx_traits" }
 http = "0.1"
 hyper = "0.12"

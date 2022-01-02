@@ -12,7 +12,7 @@ use style::properties::style_structs::Font as FontStyleStruct;
 pub type CanvasProtocol = LinearToShared<ExternalChoice<CanvasOps>>;
 
 pub type CreateCanvasProtocol =
-    LinearToShared<ReceiveValue<(Size2D<u64>, bool), SendValue<SharedChannel<CanvasProtocol>, Z>>>;
+    LinearToShared<ReceiveValue<(Size2D<u64>, bool), SendValue<SharedChannel<CanvasProtocol>, Release>>>;
 
 #[derive(Clone)]
 pub struct CanvasSession {
@@ -61,13 +61,13 @@ pub enum CanvasMessage {
 }
 
 define_choice! { CanvasOps;
-  Message: ReceiveValue < CanvasMessage, Z >,
-  Messages: ReceiveValue < Vec < CanvasMessage >, Z >,
-  GetTransform: SendValue< Transform2D<f32>, Z >,
-  GetImageData: ReceiveValue < ( Rect<u64>, Size2D<u64>),
-    SendValue < ByteBuf, Z > >,
-  IsPointInPath: ReceiveValue < ( f64, f64, FillRule ),
-    SendValue < bool, Z > >,
-  FromLayout: SendValue < Option<CanvasImageData>, Z >,
-  FromScript: SendValue < IpcSharedMemory, Z >,
+  Message: ReceiveValue<CanvasMessage, Release>,
+  Messages: ReceiveValue<Vec<CanvasMessage>, Release>,
+  GetTransform: SendValue<Transform2D<f32>, Release>,
+  GetImageData: ReceiveValue<(Rect<u64>, Size2D<u64>),
+    SendValue<ByteBuf, Release>>,
+  IsPointInPath: ReceiveValue<(f64, f64, FillRule),
+    SendValue<bool, Release>>,
+  FromLayout: SendValue<Option<CanvasImageData>, Release>,
+  FromScript: SendValue<IpcSharedMemory, Release>,
 }

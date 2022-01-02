@@ -20,7 +20,7 @@ canvas= { path = "../canvas" }
 canvas_traits = { path = "../canvas_traits" }
 embedder_traits = { path = "../embedder_traits" }
 euclid = "0.20"
-ferrite-session = "0.1.1"
+ferrite-session = "0.2.0"
 fnv = "1.0"
 gfx = { path = "../gfx" }
 gfx_traits = { path = "../gfx_traits" }
