@@ -122,7 +122,7 @@ const MAC_FONTS = [
     postscriptName: 'HiraMinProN-W3',
     fullName: 'Hiragino Mincho ProN W3',
     family: 'Hiragino Mincho ProN',
-    style: 'Regular',
+    style: 'W3',
     label: TEST_SIZE_CATEGORY.medium,
     expectedTables: [
       'CFF ',
@@ -133,7 +133,7 @@ const MAC_FONTS = [
     postscriptName: 'HiraMinProN-W6',
     fullName: 'Hiragino Mincho ProN W6',
     family: 'Hiragino Mincho ProN',
-    style: 'Regular',
+    style: 'W6',
     label: TEST_SIZE_CATEGORY.medium,
     expectedTables: [
       'CFF ',

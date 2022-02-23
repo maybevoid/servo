@@ -1,9 +1,8 @@
 import json
 import os
-from io import open
+from unittest import mock
 
 import jsone
-import mock
 import pytest
 import requests
 import yaml
@@ -36,6 +35,28 @@ def test_verify_taskcluster_yml():
                    "as_slugid": lambda x: x}
 
         jsone.render(template, context)
+
+
+@pytest.mark.parametrize("event_path,expected",
+                         [("pr_event.json",
+                           frozenset(["lint", "wpt-chrome-dev-stability"])),
+                          ("pr_event_tests_affected.json", frozenset(["lint"]))]
+                         )
+def test_exclude_users(event_path, expected):
+    """Verify that tasks excluded by the PR submitter are properly excluded"""
+    tasks = {
+        "lint": {
+            "commands": "wpt example"
+        },
+        "wpt-chrome-dev-stability": {
+            "commands": "wpt example",
+            "exclude-users": ["chromium-wpt-export-bot"]
+        }
+    }
+    with open(data_path(event_path), encoding="utf8") as f:
+        event = json.load(f)
+        decision.filter_excluded_users(tasks, event)
+        assert set(tasks) == expected
 
 
 def test_verify_payload():
@@ -131,13 +152,13 @@ def test_verify_payload():
     ("pr_event.json", True, {".taskcluster.yml", ".travis.yml", "tools/ci/start.sh"},
      ['lint',
       'tools/ unittests (Python 3.6)',
-      'tools/ unittests (Python 3.8)',
+      'tools/ unittests (Python 3.9)',
       'tools/ integration tests (Python 3.6)',
-      'tools/ integration tests (Python 3.8)',
+      'tools/ integration tests (Python 3.9)',
       'resources/ tests (Python 3.6)',
-      'resources/ tests (Python 3.8)',
+      'resources/ tests (Python 3.9)',
       'download-firefox-nightly',
-      'infrastructure/ tests (Python 3)',
+      'infrastructure/ tests',
       'sink-task']),
     # More tests are affected in the actual PR but it shouldn't affect the scheduled tasks
     ("pr_event_tests_affected.json", True, {"layout-instability/clip-negative-bottom-margin.html",
@@ -146,7 +167,6 @@ def test_verify_payload():
       'wpt-firefox-nightly-stability',
       'wpt-firefox-nightly-results',
       'wpt-firefox-nightly-results-without-changes',
-      'wpt-chrome-dev-stability',
       'wpt-chrome-dev-results',
       'wpt-chrome-dev-results-without-changes',
       'lint',

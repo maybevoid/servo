@@ -6,7 +6,6 @@ import subprocess
 import sys
 
 from collections import OrderedDict
-from six import ensure_text, ensure_str
 
 try:
     from ..manifest import manifest
@@ -38,7 +37,7 @@ if MYPY:
 
 DEFAULT_IGNORE_RULERS = ("resources/testharness*", "resources/testdriver*")
 
-here = ensure_text(os.path.dirname(__file__))
+here = os.path.dirname(__file__)
 wpt_root = os.path.abspath(os.path.join(here, os.pardir, os.pardir))
 
 logger = logging.getLogger()
@@ -136,7 +135,7 @@ def branch_point():
 
 def compile_ignore_rule(rule):
     # type: (Text) -> Pattern[Text]
-    rule = rule.replace(ensure_text(os.path.sep), u"/")
+    rule = rule.replace(os.path.sep, u"/")
     parts = rule.split(u"/")
     re_parts = []
     for part in parts:
@@ -155,8 +154,17 @@ def repo_files_changed(revish, include_uncommitted=False, include_new=False):
     if git is None:
         raise Exception("git not found")
 
-    files_list = git("diff", "--name-only", "-z", revish).split(u"\0")
-    assert not files_list[-1]
+    if "..." in revish:
+        raise Exception(f"... not supported when finding files changed (revish: {revish!r}")
+
+    if ".." in revish:
+        # ".." isn't treated as a range for git-diff; what we want is
+        # everything reachable from B but not A, and git diff A...B
+        # gives us that (via the merge-base)
+        revish = revish.replace("..", "...")
+
+    files_list = git("diff", "--no-renames", "--name-only", "-z", revish).split(u"\0")
+    assert not files_list[-1], f"final item should be empty, got: {files_list[-1]!r}"
     files = set(files_list[:-1])
 
     if include_uncommitted:
@@ -383,7 +391,7 @@ def get_revish(**kwargs):
     revish = kwargs.get("revish")
     if revish is None:
         revish = u"%s..HEAD" % branch_point()
-    return ensure_text(revish).strip()
+    return revish.strip()
 
 
 def run_changed_files(**kwargs):
@@ -398,7 +406,7 @@ def run_changed_files(**kwargs):
 
     for item in sorted(changed):
         line = os.path.relpath(item, wpt_root) + separator
-        sys.stdout.write(ensure_str(line))
+        sys.stdout.write(line)
 
 
 def run_tests_affected(**kwargs):

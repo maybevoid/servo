@@ -1,10 +1,8 @@
 import pytest
-from six import text_type
 
 from webdriver.error import NoSuchAlertException
 
 from tests.support.asserts import assert_error, assert_success
-from tests.support.inline import inline
 
 
 def get_computed_label(session, element):
@@ -30,7 +28,7 @@ def test_no_user_prompt(session):
     ("<button aria-label=foo>bar</button>", "button", "foo"),
     ("<label><input> foo</label>", "input", "foo"),
     ("<label for=b>foo<label><input id=b>", "input", "foo")])
-def test_get_computed_label(session, html, tag, label):
+def test_get_computed_label(session, inline, html, tag, label):
     session.url = inline("{0}".format(tag))
     element = session.find.css(tag, all=False)
     result = get_computed_label(session, element.id)

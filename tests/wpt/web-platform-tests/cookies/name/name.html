@@ -7,6 +7,8 @@
     <meta name="timeout" content="long">
     <script src="/resources/testharness.js"></script>
     <script src="/resources/testharnessreport.js"></script>
+    <script src="/resources/testdriver.js"></script>
+    <script src="/resources/testdriver-vendor.js"></script>
     <script src="/cookies/resources/cookie-test.js"></script>
   </head>
   <body>
@@ -138,6 +140,11 @@
           cookie: "",
           expected: "",
           name: "Ignore cookie with no name or value",
+        },
+        {
+          cookie: "%74%65%73%74=20",
+          expected: "%74%65%73%74=20",
+          name: "URL-encoded cookie name is not decoded",
         },
       ];
 

@@ -1,11 +1,9 @@
-from __future__ import absolute_import, print_function
 import argparse
 import os
 import sys
 from collections import OrderedDict
 from distutils.spawn import find_executable
 from datetime import timedelta
-from six import ensure_text
 
 from . import config
 from . import wpttest
@@ -72,6 +70,10 @@ scheme host and port.""")
                         default=True,
                         dest="fail_on_unexpected",
                         help="Exit with status code 0 when test expectations are violated")
+    parser.add_argument("--no-fail-on-unexpected-pass", action="store_false",
+                        default=True,
+                        dest="fail_on_unexpected_pass",
+                        help="Exit with status code 0 when all unexpected results are PASS")
 
     mode_group = parser.add_argument_group("Mode")
     mode_group.add_argument("--list-test-groups", action="store_true",
@@ -114,6 +116,10 @@ scheme host and port.""")
                             default=None,
                             help="The maximum number of minutes for the job to run",
                             type=lambda x: timedelta(minutes=float(x)))
+    mode_group.add_argument("--repeat-max-time", action="store",
+                            default=100,
+                            help="The maximum number of minutes for the test suite to attempt repeat runs",
+                            type=int)
     output_results_group = mode_group.add_mutually_exclusive_group()
     output_results_group.add_argument("--verify-no-output-results", action="store_false",
                                       dest="verify_output_results",
@@ -145,10 +151,11 @@ scheme host and port.""")
                                       action="append",
                                       choices=["not-implementing", "backlog", "implementing"],
                                       help="Skip tests that have the given implementation status")
-    # TODO: Remove this when QUIC is enabled by default.
-    test_selection_group.add_argument("--enable-quic", action="store_true", default=False,
-                                      help="Enable tests that require QUIC server (default: false)")
-
+    # TODO(bashi): Remove this when WebTransport over HTTP/3 server is enabled by default.
+    test_selection_group.add_argument("--enable-webtransport-h3",
+                                      action="store_true",
+                                      default=False,
+                                      help="Enable tests that require WebTransport over HTTP/3 server (default: false)")
     test_selection_group.add_argument("--tag", action="append", dest="tags",
                                       help="Labels applied to tests to include in the run. "
                                            "Labels starting dir: are equivalent to top-level directories.")
@@ -185,12 +192,18 @@ scheme host and port.""")
                                  help="Path or url to symbols file used to analyse crash minidumps.")
     debugging_group.add_argument("--stackwalk-binary", action="store", type=abs_path,
                                  help="Path to stackwalker program used to analyse minidumps.")
-    debugging_group.add_argument("--output-directory", action="store",
-                                 help="Path to chromium output directory.")
-    debugging_group.add_argument("--stackparser-script", action="store", type=abs_path,
-                                 help="Path to stack parser script used to analyse tombstones.")
     debugging_group.add_argument("--pdb", action="store_true",
                                  help="Drop into pdb on python exception")
+
+    android_group = parser.add_argument_group("Android specific arguments")
+    android_group.add_argument("--adb-binary", action="store",
+                        help="Path to adb binary to use")
+    android_group.add_argument("--package-name", action="store",
+                        help="Android package name to run tests against")
+    android_group.add_argument("--keep-app-data-directory", action="store_true",
+                        help="Don't delete the app data directory")
+    android_group.add_argument("--device-serial", action="append", default=[],
+                        help="Running Android instances to connect to, if not emulator-5554")
 
     config_group = parser.add_argument_group("Configuration")
     config_group.add_argument("--binary", action="store",
@@ -203,12 +216,6 @@ scheme host and port.""")
     config_group.add_argument('--webdriver-arg',
                               default=[], action="append", dest="webdriver_args",
                               help="Extra argument for the WebDriver binary")
-    config_group.add_argument("--adb-binary", action="store",
-                              help="Path to adb binary to use")
-    config_group.add_argument("--package-name", action="store",
-                              help="Android package name to run tests against")
-    config_group.add_argument("--device-serial", action="store",
-                              help="Running Android instance to connect to, if not emulator-5554")
     config_group.add_argument("--metadata", action="store", type=abs_path, dest="metadata_root",
                               help="Path to root directory containing test metadata"),
     config_group.add_argument("--tests", action="store", type=abs_path, dest="tests_root",
@@ -323,14 +330,17 @@ scheme host and port.""")
                              default=[], action="append", dest="user_stylesheets",
                              help="Inject a user CSS stylesheet into every test.")
 
-    servo_group = parser.add_argument_group("Chrome-specific")
-    servo_group.add_argument("--enable-mojojs", action="store_true", default=False,
+    chrome_group = parser.add_argument_group("Chrome-specific")
+    chrome_group.add_argument("--enable-mojojs", action="store_true", default=False,
                              help="Enable MojoJS for testing. Note that this flag is usally "
                              "enabled automatically by `wpt run`, if it succeeds in downloading "
                              "the right version of mojojs.zip or if --mojojs-path is specified.")
-    servo_group.add_argument("--mojojs-path",
+    chrome_group.add_argument("--mojojs-path",
                              help="Path to mojojs gen/ directory. If it is not specified, `wpt run` "
                              "will download and extract mojojs.zip into _venv2/mojojs/gen.")
+    chrome_group.add_argument("--enable-swiftshader", action="store_true", default=False,
+                             help="Enable SwiftShader for CPU-based 3D graphics. This can be used "
+                             "in environments with no hardware GPU available.")
 
     sauce_group = parser.add_argument_group("Sauce Labs-specific")
     sauce_group.add_argument("--sauce-browser", dest="sauce_browser",
@@ -365,7 +375,7 @@ scheme host and port.""")
 
     taskcluster_group = parser.add_argument_group("Taskcluster-specific")
     taskcluster_group.add_argument("--github-checks-text-file",
-                                   type=ensure_text,
+                                   type=str,
                                    help="Path to GitHub checks output file")
 
     webkit_group = parser.add_argument_group("WebKit-specific")
@@ -540,6 +550,18 @@ def check_args(kwargs):
             sys.exit(1)
         if not os.path.exists(kwargs["test_groups_file"]):
             print("--test-groups file %s not found" % kwargs["test_groups_file"])
+            sys.exit(1)
+
+    # When running on Android, the number of workers is decided by the number of
+    # emulators. Each worker will use one emulator to run the Android browser.
+    if kwargs["device_serial"]:
+        if kwargs["processes"] is None:
+            kwargs["processes"] = len(kwargs["device_serial"])
+        elif len(kwargs["device_serial"]) != kwargs["processes"]:
+            print("--processes does not match number of devices")
+            sys.exit(1)
+        elif len(set(kwargs["device_serial"])) != len(kwargs["device_serial"]):
+            print("Got duplicate --device-serial value")
             sys.exit(1)
 
     if kwargs["processes"] is None:

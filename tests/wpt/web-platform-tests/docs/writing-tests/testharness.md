@@ -16,11 +16,17 @@ A high-level overview is provided below and more information can be found here:
     clicking a mouse. See also the
     [testdriver.js extension tutorial](testdriver-extension-tutorial.md) for adding new commands.
 
-  * [idlharness.js Documentation](idlharness.md) — A library for testing
+  * [idlharness.js](idlharness.md) — A library for testing
      IDL interfaces using `testharness.js`.
 
-See [server features](server-features.md) for advanced testing features that are commonly used
-with JavaScript tests. See also the [general guidelines](general-guidelines.md) for all test types.
+  * [Message Channels](channels.md) - A way to communicate between
+    different globals, including window globals not in the same
+    browsing context group.
+
+  * [Server features](server-features.md) - Advanced testing features
+    that are commonly used with JavaScript tests.
+
+See also the [general guidelines](general-guidelines.md) for all test types.
 
 ## Window tests
 
@@ -38,7 +44,7 @@ test(() => {
 }, "Ensure HTML boilerplate uses UTF-8"); // This is the title of the test
 ```
 
-If you only need to test a [single thing](testharness-api.md#single-page-tests), you could also use:
+If you only need to test a [single thing](testharness-api.html#single-page-tests), you could also use:
 ```js
 // META: title=Ensure HTML boilerplate uses UTF-8
 setup({ single_test: true });
@@ -46,8 +52,8 @@ assert_equals(document.characterSet, "UTF-8");
 done();
 ```
 
-See [asynchronous (`async_test()`)](testharness-api.md#asynchronous-tests) and
-[promise tests (`promise_test()`)](testharness-api.md#promise-tests) for more involved setups.
+See [asynchronous (`async_test()`)](testharness-api.html#asynchronous-tests) and
+[promise tests (`promise_test()`)](testharness-api.html#promise-tests) for more involved setups.
 
 ### With HTML boilerplate
 

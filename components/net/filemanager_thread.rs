@@ -27,7 +27,7 @@ use std::ops::Index;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{self, AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
-use tokio2::sync::mpsc::UnboundedSender as TokioSender;
+use tokio::sync::mpsc::UnboundedSender as TokioSender;
 use url::Url;
 use uuid::Uuid;
 
@@ -57,7 +57,7 @@ struct FileStoreEntry {
 struct FileMetaData {
     path: PathBuf,
     /// Modified time in UNIX Epoch format
-    modified: u64,
+    _modified: u64,
     size: u64,
 }
 
@@ -660,7 +660,7 @@ impl FileManagerStore {
 
         let file_impl = FileImpl::MetaDataOnly(FileMetaData {
             path: file_path.to_path_buf(),
-            modified: modified_epoch,
+            _modified: modified_epoch,
             size: file_size,
         });
 
