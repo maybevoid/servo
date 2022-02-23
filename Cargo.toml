@@ -12,7 +12,7 @@ exclude = [".cargo"]
 [profile.release]
 opt-level = 3
 # Uncomment to profile on Linux:
-# debug = true
+debug = true
 # lto = false
 
 [patch.crates-io]
@@ -30,7 +30,8 @@ opt-level = 3
 mio = { git = "https://github.com/servo/mio.git", branch = "servo-mio-0.6.22" }
 # Work around bug in winit 0.24 crashing servo headless in macOS
 winit = { git = "https://github.com/rust-windowing/winit.git", rev = "4192d04a53202c199f94d1b7d883a34c9ad09272" }
-ferrite-session = { git = 'https://github.com/ferrite-rs/ferrite' }
+# ferrite-session = { git = "https://github.com/ferrite-rs/ferrite" }
+# ferrite-session = { path = "../ferrite/ferrite-session" }
 
 [patch."https://github.com/jrmuizel/raqote"]
 raqote = { git = "https://github.com/ferrite-rs/raqote", branch = "impl-send" }

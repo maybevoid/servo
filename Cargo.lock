@@ -586,18 +586,22 @@ dependencies = [
  "crossbeam-channel 0.4.4",
  "cssparser",
  "euclid",
+ "ferrite-session",
  "fnv",
  "font-kit",
  "gfx",
  "gleam 0.12.1",
  "half",
  "ipc-channel",
+ "lazy_static",
  "log",
  "lyon_geom 0.14.1",
  "num-traits",
  "pathfinder_geometry",
  "pixels",
  "raqote",
+ "serde",
+ "serde_bytes",
  "servo_arc",
  "servo_config",
  "sparkle",
@@ -607,6 +611,7 @@ dependencies = [
  "surfman-chains",
  "surfman-chains-api",
  "time",
+ "tokio 1.15.0",
  "webrender",
  "webrender_api",
  "webrender_surfman",
@@ -922,12 +927,14 @@ dependencies = [
  "background_hang_monitor",
  "backtrace",
  "bluetooth_traits",
+ "canvas",
  "canvas_traits",
  "compositing",
  "crossbeam-channel 0.4.4",
  "devtools_traits",
  "embedder_traits",
  "euclid",
+ "ferrite-session",
  "gaol",
  "gfx",
  "gfx_traits",
@@ -1677,6 +1684,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferrite-session"
+version = "0.3.0"
+dependencies = [
+ "ipc-channel",
+ "log",
+ "paste 1.0.6",
+ "serde",
+ "tokio 1.15.0",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2329,7 +2347,7 @@ dependencies = [
  "libc",
  "muldiv",
  "num-rational 0.2.4",
- "paste",
+ "paste 0.1.6",
 ]
 
 [[package]]
@@ -3110,9 +3128,11 @@ dependencies = [
  "app_units",
  "atomic_refcell",
  "bitflags",
+ "canvas",
  "canvas_traits",
  "embedder_traits",
  "euclid",
+ "ferrite-session",
  "fnv",
  "gfx",
  "gfx_traits",
@@ -3229,6 +3249,7 @@ dependencies = [
  "style",
  "style_traits",
  "time",
+ "tokio 1.15.0",
  "webrender_api",
 ]
 
@@ -3490,11 +3511,11 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.11"
+version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fabed175da42fed1fa0746b0ea71f412aa9d35e76e95e59b192c64b9dc2bf8b"
+checksum = "51b9bbe6c47d51fc3e1a9b945965946b4c44142ab8792c50835a980d362c2710"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
 ]
 
 [[package]]
@@ -4475,6 +4496,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0744126afe1a6dd7f394cb50a716dbe086cb06e255e53d8d0185d82828358fb5"
+
+[[package]]
 name = "paste-impl"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4911,7 +4938,7 @@ checksum = "a871f1e45a3a3f0c73fb60343c811238bb5143a81642e27c2ac7aac27ff01a63"
 [[package]]
 name = "raqote"
 version = "0.8.1-alpha.0"
-source = "git+https://github.com/jdm/raqote?branch=fkup#ff5d2d1aa7813dbcacb0d028cf7d17c82a35d9d4"
+source = "git+https://github.com/ferrite-rs/raqote?branch=impl-send#3814c83e7328bf2c62586e361cac62ec25343ea5"
 dependencies = [
  "euclid",
  "font-kit",
@@ -5155,6 +5182,7 @@ dependencies = [
  "base64 0.10.1",
  "bitflags",
  "bluetooth_traits",
+ "canvas",
  "canvas_traits",
  "chrono",
  "content-security-policy",
@@ -5170,6 +5198,7 @@ dependencies = [
  "encoding_rs",
  "enum-iterator",
  "euclid",
+ "ferrite-session",
  "fnv",
  "fxhash",
  "headers",
@@ -5229,6 +5258,7 @@ dependencies = [
  "tempfile",
  "tendril",
  "time",
+ "tokio 1.15.0",
  "unicode-bidi",
  "unicode-segmentation",
  "url",
@@ -5247,9 +5277,11 @@ version = "0.0.1"
 dependencies = [
  "app_units",
  "atomic_refcell",
+ "canvas",
  "canvas_traits",
  "crossbeam-channel 0.4.4",
  "euclid",
+ "ferrite-session",
  "fxhash",
  "gfx_traits",
  "html5ever",
@@ -5300,12 +5332,14 @@ version = "0.0.1"
 dependencies = [
  "bitflags",
  "bluetooth_traits",
+ "canvas",
  "canvas_traits",
  "cookie 0.11.2",
  "crossbeam-channel 0.4.4",
  "devtools_traits",
  "embedder_traits",
  "euclid",
+ "ferrite-session",
  "gfx_traits",
  "headers",
  "http",
@@ -5395,9 +5429,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.117"
+version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b88fa983de7720629c9387e9f517353ed404164b1e482c970a90c1a4aaf7dc1a"
+checksum = "ce31e24b01e1e524df96f1c2fdd054405f8d7376249a5110886fb4b658484789"
 dependencies = [
  "serde_derive",
 ]
@@ -5413,9 +5447,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.117"
+version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbd1ae72adb44aab48f325a02444a5fc079349a8d804c1fc922aed3f7454c74e"
+checksum = "08597e7152fcd306f41838ed3e37be9eaeed2b61c42e2117266a554fab4662f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5465,6 +5499,7 @@ dependencies = [
  "sig",
  "surfman",
  "tinyfiledialogs",
+ "tokio 1.15.0",
  "webxr",
  "winapi",
  "winit",
@@ -5852,6 +5887,15 @@ name = "sig"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6567e29578f9bfade6a5d94a32b9a4256348358d2a3f448cab0021f9a02614a2"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
 dependencies = [
  "libc",
 ]
@@ -6499,7 +6543,10 @@ dependencies = [
  "memchr",
  "mio 0.7.14",
  "num_cpus",
+ "once_cell",
+ "parking_lot 0.11.0",
  "pin-project-lite 0.2.8",
+ "signal-hook-registry",
  "tokio-macros 1.7.0",
  "winapi",
 ]

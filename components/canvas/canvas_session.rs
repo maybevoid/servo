@@ -91,7 +91,7 @@ fn handle_canvas_message(canvas: &mut CanvasData<'static>, message: CanvasMessag
 }
 
 fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasProtocol> {
-    accept_shared_session(
+    accept_shared_session(async move {
         offer_choice! {
           Message => {
             receive_value ( move | message | {
@@ -153,7 +153,8 @@ fn run_canvas_session(mut canvas: CanvasData<'static>) -> SharedSession<CanvasPr
                 run_canvas_session ( canvas )
               ))
           },
-        })
+        }
+    })
 }
 
 struct CanvasConfig {
@@ -162,7 +163,7 @@ struct CanvasConfig {
 }
 
 fn run_create_canvas_session(ctx: CanvasConfig) -> SharedSession<CreateCanvasProtocol> {
-    accept_shared_session(
+    accept_shared_session(async move {
         receive_value(move |param| {
             let (size, antialias) = param;
 
@@ -185,7 +186,8 @@ fn run_create_canvas_session(ctx: CanvasConfig) -> SharedSession<CreateCanvasPro
                 session,
                 detach_shared_session(run_create_canvas_session(ctx)),
             )
-        }))
+        })
+    })
 }
 
 pub fn create_canvas_session(
